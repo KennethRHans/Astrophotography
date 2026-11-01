@@ -26,13 +26,16 @@ __kernel void blur_image(__global const float *src, __global float *dst,
     dst[i] = total;
 }
 __kernel void color_image(__global const float *src, __global float *dst,
-                          const int pixels, const float saturation) {
+                          const int pixels, const float saturation, const float exposure, const float contrast) {
     int i = get_global_id(0);
     if (i >= pixels) return;
     int p = i*3;
     float light = src[p]*0.2126f+src[p+1]*0.7152f+src[p+2]*0.0722f;
-    for (int c=0; c<3; ++c)
-        dst[p+c] = clamp(light+saturation*(src[p+c]-light),0.0f,1.0f);
+    for (int c=0; c<3; ++c) {
+        float value = clamp(light+saturation*(src[p+c]-light),0.0f,1.0f);
+        if (exposure != 1.0f || contrast != 1.0f) value=(value*exposure-0.18f)*contrast+0.18f;
+        dst[p+c] = clamp(value,0.0f,1.0f);
+    }
 }
 '''
 
@@ -63,7 +66,7 @@ class GpuProcessor:
         self.blur_kernel = cl.Kernel(program, 'blur_image')
         self.color_kernel = cl.Kernel(program, 'color_image')
 
-    def process(self, image, stretch, saturation, denoise):
+    def process(self, image, stretch, saturation, denoise, brightness=0, contrast=1):
         cl = self.cl
         source = np.ascontiguousarray(image, dtype=np.float32)
         h, w, _ = source.shape
@@ -80,7 +83,7 @@ class GpuProcessor:
             for vertical in (0,1):
                 self.blur_kernel(self.queue,(source.size,),None,current,spare,weights_buffer,np.int32(radius),np.int32(w),np.int32(h),np.int32(vertical))
                 current, spare = spare, current
-        self.color_kernel(self.queue,(h*w,),None,current,spare,np.int32(h*w),np.float32(saturation))
+        self.color_kernel(self.queue,(h*w,),None,current,spare,np.int32(h*w),np.float32(saturation),np.float32(2.**brightness),np.float32(contrast))
         result = np.empty_like(source)
         cl.enqueue_copy(self.queue,result,spare).wait()
         return result

@@ -1,4 +1,4 @@
-# Seestar Studio — preview 0.6
+# Seestar Studio — preview 0.7
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
@@ -12,6 +12,35 @@ This setting starts off and is experimental. Star matching, registration,
 stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Preview editing changes (0.7)
+Crop edges and corner handles are dragged directly in the image. Drag inside a
+selection to move it. The old Left/Right/Top/Bottom input fields have been removed.
+Aspect ratios, guides, Apply crop and Restore full frame are retained.
+Use +/−, Fit, 100% or the image's mouse wheel to zoom. Right- or middle-drag pans.
+Zoom only changes the view; saved resolution is determined by the crop. At 100%
+the preview uses native image pixels. Rulers and crop handles share image coordinates.
+
+Brightness adjusts displayed exposure from -2 to +2 stops. Contrast adjusts
+around a display midpoint of 0.18. Both work with CPU and GPU and reset to neutral.
+Stretch and black level remain separate. FITS export still preserves linear data.
+JPG/JPEG export produces an 8-bit, quality-95 image (lossy); TIFF/PNG/FITS remain.
+
+Slider wheel sensitivity is narrowed horizontally by 10%: the outer 5% on each
+side passes wheel events to the scrolling panel. Handle size remains unchanged.
+GPU selection is now persistent at the top of the sidebar, above the scrolling
+steps. Numbered sections have distinct colored borders/backgrounds and spacing.
+The top includes Instructions For Use, indented step numbers and the requested
+independent-project disclaimer under the name.
+
+## Telescope header photo
+The header has a Choose photo button for a local JPG/PNG/WebP telescope image.
+Your selection is remembered locally; it is not uploaded. No stock photo is
+bundled in 0.7: downloading the reusable source was blocked by the build workspace
+network policy. A suitable source is [Seestar S50 smart telescope](https://commons.wikimedia.org/wiki/File:Seestar_S50_smart_telescope.jpg),
+photographed by El Mexicano, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+If that photo is later bundled or modified, retain its credit and license, and
+indicate modifications. The current app does not contain that photo.
 
 ## Guided workflow (0.6)
 The controls are grouped under numbered headings matching the introduction:
@@ -181,4 +210,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-

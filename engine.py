@@ -178,7 +178,7 @@ def correct_background(linear, strength=0, model=None):
 
 
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), model=None, gpu=None):
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, model=None, gpu=None):
     image = correct_background(linear, gradient, model)
     valid = (linear > 0).all(axis=-1)
     sample = image[valid]
@@ -191,7 +191,7 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(image/white, 0, 1)
     if gpu is not None and not gpu.disabled:
         try:
-            result = gpu.process(image, stretch, saturation, denoise)
+            result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
             if not np.isfinite(result).all():
                 raise RuntimeError('GPU returned nonfinite pixels')
             result[~valid] = 0
@@ -205,6 +205,8 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
         image = gaussian_filter(image, sigma=(denoise, denoise, 0))
     luminance = image @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
+    if brightness != 0 or contrast != 1:
+        image = np.clip((image*(2.**brightness)-.18)*contrast+.18,0,1)
     image[~valid] = 0
     return image
 
@@ -227,6 +229,45 @@ def fit_crop_ratio(bounds, ratio):
     width, height = rw*multiple, rh*multiple
     left, top = x0+((x1-x0)-width)//2, y0+((y1-y0)-height)//2
     return left, top, left+width, top+height
+
+
+def resize_crop(bounds, edges, point, image_size, ratio=None):
+    """Resize a crop, keeping opposite edges fixed and optional ratio exact."""
+    from math import gcd
+    x0,y0,x1,y1=map(int,bounds);px,py=map(int,point);w,h=map(int,image_size)
+    if ratio is None:
+        if 'l' in edges:x0=max(0,min(px,x1-1))
+        if 'r' in edges:x1=min(w,max(px,x0+1))
+        if 't' in edges:y0=max(0,min(py,y1-1))
+        if 'b' in edges:y1=min(h,max(py,y0+1))
+        return x0,y0,x1,y1
+    rw,rh=map(int,ratio);divisor=gcd(rw,rh);rw//=divisor;rh//=divisor
+    horizontal='l' in edges or 'r' in edges;vertical='t' in edges or 'b' in edges
+    ax=x1 if 'l' in edges else x0
+    ay=y1 if 't' in edges else y0
+    if horizontal and vertical:
+        available_x=ax if 'l' in edges else w-ax
+        available_y=ay if 't' in edges else h-ay
+        maximum=min(available_x//rw,available_y//rh)
+        wanted=min(round(abs(px-ax)/rw),round(abs(py-ay)/rh))
+    elif horizontal:
+        cy=(y0+y1)/2
+        maximum=min((ax if 'l' in edges else w-ax)//rw,int(2*min(cy,h-cy)//rh))
+        wanted=round(abs(px-ax)/rw)
+    else:
+        cx=(x0+x1)/2
+        maximum=min((ay if 't' in edges else h-ay)//rh,int(2*min(cx,w-cx)//rw))
+        wanted=round(abs(py-ay)/rh)
+    if maximum<1:return bounds
+    k=max(1,min(maximum,wanted));width,height=k*rw,k*rh
+    if horizontal:
+        left=ax-width if 'l' in edges else ax
+    else:left=round((x0+x1-width)/2)
+    if vertical:
+        top=ay-height if 't' in edges else ay
+    else:top=round((y0+y1-height)/2)
+    left=max(0,min(w-width,left));top=max(0,min(h-height,top))
+    return left,top,left+width,top+height
 
 
 def crop_image(linear, header, left=0, right=0, top=0, bottom=0):
@@ -274,7 +315,9 @@ def save(path, linear, rendered, header):
         fits.writeto(path, np.moveaxis(linear, -1, 0), hdr, overwrite=True)
     elif suffix in ('.tif', '.tiff'):
         tifffile.imwrite(path, np.round(rendered*65535).astype(np.uint16), photometric='rgb')
+    elif suffix in ('.jpg', '.jpeg'):
+        Image.fromarray(np.round(rendered*255).astype(np.uint8)).save(path,quality=95,subsampling=0,progressive=True)
     elif suffix == '.png':
         Image.fromarray(np.round(rendered*255).astype(np.uint8)).save(path)
     else:
-        raise ValueError('Choose .fits, .tif, .tiff or .png.')
+        raise ValueError('Choose .fits, .tif, .tiff, .png, .jpg or .jpeg.')

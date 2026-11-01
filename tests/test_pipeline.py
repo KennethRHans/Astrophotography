@@ -153,3 +153,27 @@ def test_export_names_for_windows():
     name=engine.export_basename({'OBJECT':'../../C:56?*'})
     assert '/' not in name and ':' not in name and '?' not in name
     assert not name.endswith(('.', ' '))
+
+
+def test_crop_resize_edges_and_ratio_bounds():
+    bounds=(100,100,700,500)
+    for edge in ('l','r','t','b','lt','rt','lb','rb'):
+        for ratio in (None,(3,2),(16,9)):
+            x0,y0,x1,y1=engine.resize_crop(bounds,edge,(400,300),(800,600),ratio)
+            assert 0<=x0<x1<=800 and 0<=y0<y1<=600
+            if ratio:assert (x1-x0)*ratio[1]==(y1-y0)*ratio[0]
+    assert engine.resize_crop(bounds,'l',(200,0),(800,600))==(200,100,700,500)
+    assert engine.resize_crop(bounds,'r',(2000,0),(800,600))==(100,100,800,500)
+
+
+def test_brightness_contrast_and_jpeg_export(tmp_path):
+    from PIL import Image
+    data=np.repeat(np.linspace(100,1000,400,dtype='float32').reshape(20,20,1),3,axis=-1)
+    baseline=engine.render(data,stretch=0)
+    bright=engine.render(data,stretch=0,brightness=.5)
+    soft=engine.render(data,stretch=0,contrast=.5)
+    assert bright.mean()>baseline.mean()
+    assert np.ptp(soft)<np.ptp(baseline)
+    path=tmp_path/'C56.jpg';engine.save(path,data,bright,fits.Header())
+    with Image.open(path) as image:
+        assert image.format=='JPEG' and image.mode=='RGB' and image.size==(20,20)

@@ -29,8 +29,8 @@ def test_opencl_matches_cpu_adjustments():
     processor=GpuProcessor(context=cl.Context([devices[0]]))
     image=np.random.default_rng(12).uniform(100,1500,(80,100,3)).astype('float32')
     image[:2]=0
-    for smoothing in (0,.8,1.5):
-        cpu=engine.render(image,stretch=30,saturation=1.3,denoise=smoothing)
-        actual=engine.render(image,stretch=30,saturation=1.3,denoise=smoothing,gpu=processor)
+    for smoothing,brightness,contrast in [(0,0,1),(.8,.5,1.4),(1.5,-.5,.8)]:
+        cpu=engine.render(image,stretch=30,saturation=1.3,denoise=smoothing,brightness=brightness,contrast=contrast)
+        actual=engine.render(image,stretch=30,saturation=1.3,denoise=smoothing,gpu=processor,brightness=brightness,contrast=contrast)
         assert not processor.disabled,processor.last_error
         np.testing.assert_allclose(actual,cpu,atol=3e-5,rtol=3e-5)

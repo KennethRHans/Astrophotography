@@ -5,106 +5,15 @@ import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 
-class CropPreview(W.QLabel):
-    selection = QtCore.Signal(int, int, int, int)
-    def __init__(self, text):
-        super().__init__(text)
-        self.source_size = None
-        self.drag_start = None
-        self.ratio = None
-        self.guide = 'Thirds + rulers'
-        self.selection_pixels = None
-        self.band = W.QFrame(self)
-        self.band.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        self.band.setStyleSheet('background: transparent; border: 1px solid #5ae6ff;')
-        self.band.hide()
-        self.setCursor(QtCore.Qt.CrossCursor)
-    def image_rect(self):
-        pixmap = self.pixmap()
-        if pixmap is None or pixmap.isNull():
-            return QtCore.QRect()
-        return QtCore.QRect((self.width()-pixmap.width())//2,
-                            (self.height()-pixmap.height())//2,
-                            pixmap.width(), pixmap.height())
-    def selection_rect(self):
-        area = self.image_rect()
-        if not self.source_size or not self.selection_pixels or area.isEmpty():
-            return area
-        w, h = self.source_size
-        x0,y0,x1,y1 = self.selection_pixels
-        return QtCore.QRect(round(area.x()+x0*area.width()/w), round(area.y()+y0*area.height()/h),
-                            max(1,round((x1-x0)*area.width()/w)), max(1,round((y1-y0)*area.height()/h)))
-    def update_band(self):
-        if self.selection_pixels and self.source_size:
-            w,h = self.source_size
-            if self.selection_pixels != (0,0,w,h):
-                self.band.setGeometry(self.selection_rect()); self.band.show()
-            else:
-                self.band.hide()
-        else:
-            self.band.hide()
-        self.update()
-    def pixels_at(self, point):
-        bounds = self.image_rect(); w,h = self.source_size
-        x = int(np.floor((point.x()-bounds.x())*w/max(bounds.width(),1)))
-        y = int(np.floor((point.y()-bounds.y())*h/max(bounds.height(),1)))
-        return max(0,min(w,x)), max(0,min(h,y))
-    def drag_to(self, point):
-        x0,y0 = self.pixels_at(self.drag_start)
-        x1,y1 = self.pixels_at(point)
-        bounds = (min(x0,x1),min(y0,y1),max(x0,x1),max(y0,y1))
-        try:
-            self.selection_pixels = engine.fit_crop_ratio(bounds,self.ratio)
-        except ValueError:
-            return
-        self.update_band()
-    def mousePressEvent(self, event):
-        point = event.position().toPoint()
-        if event.button() == QtCore.Qt.LeftButton and self.source_size and self.image_rect().contains(point):
-            self.drag_start = point
-    def mouseMoveEvent(self, event):
-        if self.drag_start is not None:
-            self.drag_to(event.position().toPoint())
-    def mouseReleaseEvent(self, event):
-        if self.drag_start is None or event.button() != QtCore.Qt.LeftButton:
-            return
-        if (event.position().toPoint()-self.drag_start).manhattanLength() >= 3:
-            self.drag_to(event.position().toPoint())
-            if self.selection_pixels:
-                self.selection.emit(*self.selection_pixels)
-        self.drag_start = None
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        area = self.image_rect()
-        if area.isEmpty() or not self.source_size or self.guide == 'Off':
-            return
-        painter = QtGui.QPainter(self)
-        painter.setClipRect(area)
-        rect = self.selection_rect()
-        painter.setPen(QtGui.QPen(QtGui.QColor(90,230,255,180),1,QtCore.Qt.DashLine))
-        count = 3 if self.guide.startswith('Thirds') else 10 if self.guide.startswith('Grid') else 2
-        for part in range(1,count):
-            x=rect.x()+round(rect.width()*part/count); y=rect.y()+round(rect.height()*part/count)
-            painter.drawLine(x,rect.top(),x,rect.bottom())
-            painter.drawLine(rect.left(),y,rect.right(),y)
-        # Rulers are pixel positions in the current frame, never sky coordinates.
-        painter.fillRect(area.x(),area.y(),area.width(),18,QtGui.QColor(0,0,0,175))
-        painter.setPen(QtGui.QColor(220,250,255))
-        font=painter.font(); font.setPixelSize(11); painter.setFont(font)
-        w,h=self.source_size
-        for part in range(5):
-            fraction=part/4
-            x=area.x()+round((area.width()-1)*fraction)
-            y=area.y()+round((area.height()-1)*fraction)
-            painter.drawLine(x,area.top(),x,area.top()+5)
-            label=f'{round((w-1)*fraction):,}'
-            tx=min(x+2,area.right()-painter.fontMetrics().horizontalAdvance(label))
-            painter.drawText(tx,area.top()+15,label)
-            if part:
-                label=f'{round((h-1)*fraction):,}'
-                painter.fillRect(area.left(),max(area.top(),y-13),painter.fontMetrics().horizontalAdvance(label)+5,15,QtGui.QColor(0,0,0,175))
-                painter.drawText(area.left()+3,min(y,area.bottom()-1),label)
-        painter.end()
+from preview import ImagePreview
+
+class WheelSlider(W.QSlider):
+    """Keep the outer 5% on each side available for panel scrolling."""
+    def wheelEvent(self,event):
+        margin=self.width()*.05
+        if event.position().x()<margin or event.position().x()>self.width()-margin:
+            event.ignore();return
+        super().wheelEvent(event)
 
 
 class Worker(QtCore.QThread):
@@ -125,9 +34,13 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.6')
+        self.setWindowTitle('Seestar Studio • Preview 0.7')
         self.resize(1200, 800)
         self.setStyleSheet("""
+            QGroupBox#stepLoad { border: 2px solid #4297c3; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #edf7fd; }
+            QGroupBox#stepAdjust { border: 2px solid #4c9a77; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #effaf4; }
+            QGroupBox#stepExport { border: 2px solid #9173b5; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #f6f0fc; }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 1px 6px; }
             QSlider::groove:horizontal { height: 8px; background: #b9c5cf; border-radius: 4px; }
             QSlider::sub-page:horizontal { background: #2999ce; border-radius: 4px; }
             QSlider::handle:horizontal { width: 24px; margin: -8px 0; background: #f5f9fc;
@@ -141,15 +54,29 @@ class Window(W.QMainWindow):
         self.gpu = None
         root = W.QWidget(); self.setCentralWidget(root)
         layout = W.QHBoxLayout(root)
+        left_column = W.QVBoxLayout(); layout.addLayout(left_column,1)
+        header = W.QWidget(); header_row = W.QHBoxLayout(header); header_row.setContentsMargins(0,0,0,0)
+        self.photo_button = W.QToolButton(); self.photo_button.setText('🔭\nChoose photo'); self.photo_button.setFixedSize(84,84)
+        self.photo_button.setToolTip('Choose a local Seestar telescope photo for the header')
+        self.photo_button.clicked.connect(self.choose_header_photo); header_row.addWidget(self.photo_button)
+        brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
+        title = W.QLabel('Seestar Studio'); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
+        disclaimer = W.QLabel('Not affiliated with Suzhou ZWO Co., Ltd.'); disclaimer.setWordWrap(True); disclaimer.setContentsMargins(12,0,0,0); brand.addWidget(disclaimer)
+        left_column.addWidget(header)
+        self.settings_store = QtCore.QSettings('SeestarStudio','SeestarStudio')
+        self.load_header_photo(self.settings_store.value('headerPhoto',''))
+        self.use_gpu = W.QCheckBox('Use GPU for image adjustments')
+        self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
+        self.use_gpu.toggled.connect(self.toggle_gpu); left_column.addWidget(self.use_gpu)
         controls = W.QWidget()
         sidebar = W.QVBoxLayout(controls)
         scroll = W.QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(controls)
-        scroll.setMinimumWidth(360); layout.addWidget(scroll, 1)
+        scroll.setMinimumWidth(360); left_column.addWidget(scroll,1)
         self.sidebar_scroll = scroll
-        title = W.QLabel('Seestar Studio'); title.setStyleSheet('font-size:26px; font-weight:bold'); sidebar.addWidget(title)
-        intro = W.QLabel('1. Load or stack\n2. Adjust and crop\n3. Export'); sidebar.addWidget(intro)
+        instructions = W.QLabel('Instructions For Use:'); instructions.setStyleSheet('font-weight:bold; font-size:15px'); sidebar.addWidget(instructions)
+        intro = W.QLabel('1. Load or stack\n2. Adjust and crop\n3. Export'); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
         outer_sidebar = sidebar
-        self.step_load = W.QGroupBox('1. Load or stack')
+        self.step_load = W.QGroupBox('1. Load or stack'); self.step_load.setObjectName('stepLoad')
         outer_sidebar.addWidget(self.step_load)
         sidebar = W.QVBoxLayout(self.step_load)
         load_hint = W.QLabel('Add individual exposures and stack them, or open a stack you already have.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
@@ -166,15 +93,16 @@ class Window(W.QMainWindow):
         self.next_adjust.setEnabled(False)
         self.next_adjust.clicked.connect(lambda: self.show_step(self.step_adjust))
         sidebar.addWidget(self.next_adjust)
-        self.step_adjust = W.QGroupBox('2. Adjust and crop')
+        outer_sidebar.addSpacing(20)
+        self.step_adjust = W.QGroupBox('2. Adjust and crop'); self.step_adjust.setObjectName('stepAdjust')
         self.step_adjust.setEnabled(False); outer_sidebar.addWidget(self.step_adjust)
         sidebar = W.QVBoxLayout(self.step_adjust)
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
         self.slider_defaults = {}
-        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100)]:
+        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
             sidebar.addWidget(W.QLabel(label))
-            slider = W.QSlider(QtCore.Qt.Horizontal); slider.setMinimumHeight(36); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
+            slider = WheelSlider(QtCore.Qt.Horizontal); slider.setMinimumHeight(36); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
             self.slider_defaults[label] = default
             slider.valueChanged.connect(self.schedule_preview)
             value = W.QLabel(str(default)); sidebar.addWidget(value)
@@ -185,10 +113,7 @@ class Window(W.QMainWindow):
         self.reset.setToolTip('Restore all sliders to their starting values')
         self.reset.clicked.connect(self.reset_adjustments)
         sidebar.addWidget(self.reset)
-        self.use_gpu = W.QCheckBox('Use GPU for adjustments (experimental)')
-        self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
-        self.use_gpu.toggled.connect(self.toggle_gpu); sidebar.addWidget(self.use_gpu)
-        self.crop_group = W.QGroupBox('Crop — drag on the image or trim edges')
+        self.crop_group = W.QGroupBox('Crop — drag edges or corners in the image')
         crop_layout = W.QFormLayout(self.crop_group)
         self.crop_ratio = W.QComboBox()
         for title, ratio in [('Free',None),('Original', 'original'),('Square (1:1)',(1,1)),('4:3',(4,3)),('3:2',(3,2)),('16:9',(16,9)),('3:4 portrait',(3,4)),('2:3 portrait',(2,3)),('9:16 portrait',(9,16))]:
@@ -199,30 +124,50 @@ class Window(W.QMainWindow):
         self.guides.currentTextChanged.connect(self.guides_changed)
         crop_layout.addRow('Alignment guides',self.guides)
         self.crop_dimensions = W.QLabel('No image loaded'); crop_layout.addRow(self.crop_dimensions)
-        self.crop_margins = {}
-        for edge in ('Left', 'Right', 'Top', 'Bottom'):
-            spin = W.QSpinBox(); spin.setRange(0, 0); spin.setSuffix(' px'); spin.setKeyboardTracking(False)
-            spin.valueChanged.connect(self.crop_margins_changed)
-            crop_layout.addRow(edge, spin); self.crop_margins[edge] = spin
         self.apply_crop = W.QPushButton('Apply crop'); self.apply_crop.clicked.connect(self.crop_selected)
         self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
         crop_layout.addRow(self.apply_crop); crop_layout.addRow(self.restore_crop)
         self.crop_group.setEnabled(False); sidebar.addWidget(self.crop_group)
         next_export = W.QPushButton('Continue to step 3: Export →')
         next_export.clicked.connect(lambda: self.show_step(self.step_export)); sidebar.addWidget(next_export)
-        self.step_export = W.QGroupBox('3. Export')
+        outer_sidebar.addSpacing(20)
+        self.step_export = W.QGroupBox('3. Export'); self.step_export.setObjectName('stepExport')
         self.step_export.setEnabled(False); outer_sidebar.addWidget(self.step_export)
         sidebar = W.QVBoxLayout(self.step_export)
-        export_hint = W.QLabel('Save the adjusted picture as TIFF or PNG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
+        export_hint = W.QLabel('Save the adjusted picture as TIFF, PNG or JPG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
         self.export = W.QPushButton('3. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
-        self.preview = CropPreview('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
+        zoom_row = W.QHBoxLayout(); right.addLayout(zoom_row)
+        self.zoom_out = W.QPushButton('−'); self.zoom_out.setFixedWidth(36); zoom_row.addWidget(self.zoom_out)
+        self.zoom_in = W.QPushButton('+'); self.zoom_in.setFixedWidth(36); zoom_row.addWidget(self.zoom_in)
+        self.zoom_fit = W.QPushButton('Fit'); zoom_row.addWidget(self.zoom_fit)
+        self.zoom_actual = W.QPushButton('100%'); zoom_row.addWidget(self.zoom_actual)
+        self.zoom_label = W.QLabel('Fit'); zoom_row.addWidget(self.zoom_label); zoom_row.addStretch()
+        self.preview = ImagePreview(); right.addWidget(self.preview,4)
+        zoom_hint = W.QLabel('Drag crop edges/corners • Drag inside to move • Wheel to zoom • Right-drag to pan')
+        zoom_hint.setWordWrap(True); right.addWidget(zoom_hint)
+        self.zoom_out.clicked.connect(lambda: self.preview.zoom_by(.8))
+        self.zoom_in.clicked.connect(lambda: self.preview.zoom_by(1.25))
+        self.zoom_fit.clicked.connect(self.preview.fit_image)
+        self.zoom_actual.clicked.connect(lambda: self.preview.set_zoom(1))
+        self.preview.zoomChanged.connect(self.zoom_changed)
         self.preview.selection.connect(self.select_crop)
         self.progress_text = W.QLabel('Ready'); right.addWidget(self.progress_text)
         self.progress_bar = W.QProgressBar(); self.progress_bar.setRange(0, 100); self.progress_bar.setValue(0); right.addWidget(self.progress_bar)
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+    def load_header_photo(self,path):
+        pixmap=QtGui.QPixmap(str(path)) if path else QtGui.QPixmap()
+        if not pixmap.isNull():
+            self.photo_button.setIcon(QtGui.QIcon(pixmap)); self.photo_button.setIconSize(QtCore.QSize(78,78)); self.photo_button.setText('')
+    def choose_header_photo(self):
+        path,_=W.QFileDialog.getOpenFileName(self,'Choose telescope photo','','Images (*.jpg *.jpeg *.png *.webp)')
+        if path:
+            self.load_header_photo(path); self.settings_store.setValue('headerPhoto',path)
+    def zoom_changed(self,scale):
+        self.zoom_label.setText(f'{scale*100:.0f}%')
+        if hasattr(self,'timer'): self.schedule_preview()
     def show_step(self, widget):
         position = widget.mapTo(self.sidebar_scroll.widget(), QtCore.QPoint(0, 0)).y()
         self.sidebar_scroll.verticalScrollBar().setValue(position)
@@ -312,47 +257,39 @@ class Window(W.QMainWindow):
             return (self.original_linear.shape[1],self.original_linear.shape[0])
         return ratio
     def guides_changed(self, text):
-        self.preview.guide = text; self.preview.update()
+        self.preview.guide = text; self.preview.viewport().update()
     def ratio_changed(self):
         if self.linear is None:
             return
         self.preview.ratio=self.active_crop_ratio()
-        self.crop_margins_changed()
+        self.crop_selection_changed()
     def reset_crop_controls(self):
         h,w,_=self.linear.shape
         self.crop_group.setEnabled(True)
-        for name,spin in self.crop_margins.items():
-            spin.blockSignals(True)
-            spin.setMaximum((w if name in ('Left','Right') else h)-1); spin.setValue(0)
-            spin.blockSignals(False)
         self.preview.source_size=(w,h)
         self.preview.ratio=self.active_crop_ratio()
-        self.crop_margins_changed()
-    def crop_margins_changed(self):
-        if self.linear is None:
-            return
-        h,w,_=self.linear.shape
-        margins={name:spin.value() for name,spin in self.crop_margins.items()}
-        bounds=(margins['Left'],margins['Top'],w-margins['Right'],h-margins['Bottom'])
+        self.crop_bounds=(0,0,w,h)
+        self.preview.fit_mode=True
+        self.crop_selection_changed()
+    def crop_selection_changed(self):
+        if self.linear is None:return
+        bounds=getattr(self,'crop_bounds',(0,0,self.linear.shape[1],self.linear.shape[0]))
         try:
             self.select_crop(*engine.fit_crop_ratio(bounds,self.active_crop_ratio()))
-            self.apply_crop.setEnabled(True)
         except ValueError as exc:
-            self.crop_dimensions.setText(str(exc)); self.apply_crop.setEnabled(False)
-    def select_crop(self, x0, y0, x1, y1):
-        h,w,_=self.linear.shape
-        for name,value in zip(('Left','Right','Top','Bottom'),(x0,w-x1,y0,h-y1)):
-            self.crop_margins[name].blockSignals(True)
-            self.crop_margins[name].setValue(value)
-            self.crop_margins[name].blockSignals(False)
+            self.crop_dimensions.setText(str(exc));self.apply_crop.setEnabled(False)
+    def select_crop(self,x0,y0,x1,y1):
+        self.crop_bounds=(x0,y0,x1,y1)
         self.apply_crop.setEnabled(True)
-        self.preview.selection_pixels=(x0,y0,x1,y1)
+        self.preview.selection_pixels=self.crop_bounds
         self.crop_dimensions.setText(f'Crop: {x1-x0:,} × {y1-y0:,} px • X {x0:,}, Y {y0:,}')
         self.preview.update_band()
     def crop_selected(self):
         if self.linear is None:
             return
-        margins = {name.lower(): spin.value() for name, spin in self.crop_margins.items()}
+        h,w,_=self.linear.shape
+        x0,y0,x1,y1=self.crop_bounds
+        margins=dict(left=x0,right=w-x1,top=y0,bottom=h-y1)
         if not any(margins.values()):
             return
         try:
@@ -379,35 +316,30 @@ class Window(W.QMainWindow):
         self.update_preview()
     def schedule_preview(self): self.timer.start(150)
     def settings(self):
-        values = [s.value() for s in self.sliders.values()]
-        return (30, .1, 1, 0, 0, (1, 1, 1)) if self.baseline.isChecked() else (values[0], values[1]/100, values[2]/100, values[3]/100, values[4]/100, tuple(v/100 for v in values[5:8]))
+        v={name:slider.value() for name,slider in self.sliders.items()}
+        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1)
+        return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
+                v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100)
     def update_preview(self):
         if self.linear is None: return
         # Interactive display is reduced; export always renders at native resolution.
-        step = max(1, int(np.ceil(max(self.linear.shape[:2])/1400)))
+        step = max(1, int(np.floor(1/max(self.preview.transform().m11(), .01))))
         small = cv2.resize(self.linear, (max(1, self.linear.shape[1]//step), max(1, self.linear.shape[0]//step)), interpolation=cv2.INTER_AREA)
         preview = engine.render(small, *self.settings(), model=self.background, gpu=self.gpu)
         self.report_gpu_failure()
         pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
         image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
-        self.preview.source_size = (self.linear.shape[1], self.linear.shape[0])
-        self.pixmap = QtGui.QPixmap.fromImage(image)
-        self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-        self.preview.update_band()
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, 'pixmap'):
-            self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-            self.preview.update_band()
+        self.preview.set_image(image,(self.linear.shape[1],self.linear.shape[0]))
     def save(self):
         folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
         dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
         dialog.setAcceptMode(W.QFileDialog.AcceptSave)
         dialog.setFileMode(W.QFileDialog.AnyFile)
-        dialog.setNameFilters(['16-bit TIFF (*.tif)', 'PNG (*.png)', 'Linear FITS (*.fits)'])
+        dialog.setNameFilters(['16-bit TIFF (*.tif)', 'PNG (*.png)', 'JPG / JPEG (*.jpg *.jpeg)', 'Linear FITS (*.fits)'])
         dialog.setDefaultSuffix('tif')
         dialog.selectFile(engine.export_basename(self.header, self.source_name))
-        dialog.filterSelected.connect(lambda selected: dialog.setDefaultSuffix('fits' if 'FITS' in selected else 'png' if 'PNG' in selected else 'tif'))
+        dialog.filterSelected.connect(lambda selected: dialog.setDefaultSuffix('fits' if 'FITS' in selected else 'png' if 'PNG' in selected else 'jpg' if 'JPG' in selected else 'tif'))
         if dialog.exec() != W.QDialog.Accepted:
             return
         path = dialog.selectedFiles()[0]
@@ -439,7 +371,7 @@ if __name__ == '__main__':
         window.loaded(sample, fits.Header())
         window.sliders['Background correction %'].setValue(50)
         window.reset.click()
-        window.crop_margins['Left'].setValue(5)
+        window.select_crop(5,0,80,60)
         window.apply_crop.click()
         assert window.linear.shape == (60, 75, 3)
         window.restore_crop.click()
@@ -448,8 +380,17 @@ if __name__ == '__main__':
         window.apply_crop.click()
         assert window.linear.shape[1]*9 == window.linear.shape[0]*16
         window.restore_crop.click()
+        window.preview.set_zoom(1)
+        window.zoom_fit.click()
         window.update_preview()
         app.processEvents()
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            output=Path(folder)/'smoke.jpg'
+            engine.save(output,window.linear,engine.render(window.linear,*window.settings()),window.header)
+            from PIL import Image
+            with Image.open(output) as exported:
+                assert exported.format=='JPEG'
         window.close()
         sys.exit(0)
     sys.exit(app.exec())
