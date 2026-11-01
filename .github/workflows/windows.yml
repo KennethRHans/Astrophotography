@@ -12,6 +12,8 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest 'pyinstaller>=6.16,<7'
       - run: python -m pytest -q
+      - name: Remove test runner before freezing runtime
+        run: python -m pip uninstall -y pytest
       - run: python -m PyInstaller --noconfirm --windowed --name SeestarStudio --hidden-import sep --collect-submodules skimage.transform app.py
       - name: Test packaged application
         shell: pwsh
