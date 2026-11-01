@@ -178,7 +178,7 @@ def correct_background(linear, strength=0, model=None):
 
 
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), model=None):
+           gradient=0, gains=(1, 1, 1), model=None, gpu=None):
     image = correct_background(linear, gradient, model)
     valid = (linear > 0).all(axis=-1)
     sample = image[valid]
@@ -189,6 +189,17 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image *= np.asarray(gains, dtype=np.float32)
     white = max(float(np.percentile(image[valid], 99.9)), 1e-12)
     image = np.clip(image/white, 0, 1)
+    if gpu is not None and not gpu.disabled:
+        try:
+            result = gpu.process(image, stretch, saturation, denoise)
+            if not np.isfinite(result).all():
+                raise RuntimeError('GPU returned nonfinite pixels')
+            result[~valid] = 0
+            return result
+        except Exception as exc:
+            gpu.disabled = True
+            gpu.last_error = str(exc)
+            # Re-run from the same normalized image on CPU after a GPU failure.
     image = np.arcsinh(image*stretch)/np.arcsinh(stretch) if stretch > 0 else image
     if denoise:
         image = gaussian_filter(image, sigma=(denoise, denoise, 0))
@@ -196,6 +207,28 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
     image[~valid] = 0
     return image
+
+
+def crop_image(linear, header, left=0, right=0, top=0, bottom=0):
+    """Crop RGB pixels and shift FITS WCS reference pixels without resampling."""
+    h, w, _ = linear.shape
+    margins = (left, right, top, bottom)
+    if any(not isinstance(v, (int, np.integer)) or v < 0 for v in margins):
+        raise ValueError('Crop margins must be nonnegative whole pixels.')
+    if left+right >= w or top+bottom >= h:
+        raise ValueError('Crop must leave at least one pixel in each dimension.')
+    cropped = linear[top:h-bottom, left:w-right]
+    hdr = header.copy()
+    # Alternate WCS versions use letter suffixes. SIP offsets share CRPIX.
+    for suffix in ['', *'ABCDEFGHIJKLMNOPQRSTUVWXYZ']:
+        for axis, shift in ((1, left), (2, top)):
+            key = f'CRPIX{axis}{suffix}'
+            if key in hdr:
+                hdr[key] = float(hdr[key])-shift
+    hdr['IMAGEW'] = cropped.shape[1]
+    hdr['IMAGEH'] = cropped.shape[0]
+    hdr.add_history(f'Crop: left={left}, right={right}, top={top}, bottom={bottom} pixels.')
+    return cropped, hdr
 
 
 def save(path, linear, rendered, header):

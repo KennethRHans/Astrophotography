@@ -107,3 +107,26 @@ def test_color_controls_and_missing_coverage():
     assert neutral[30,30,0] == neutral[30,30,1]
     assert np.all(warm[:2] == 0)
     assert np.isfinite(engine.render(np.zeros_like(data))).all()
+
+
+def test_crop_preserves_pixels_and_sky_coordinates(tmp_path):
+    from astropy.wcs import WCS, Sip
+    wcs = WCS(naxis=2)
+    wcs.wcs.crpix = [70., 55.]
+    wcs.wcs.crval = [12., -11.]
+    wcs.wcs.cdelt = [-.001,.001]
+    wcs.wcs.ctype = ['RA---TAN-SIP','DEC--TAN-SIP']
+    a = np.zeros((3,3)); b = np.zeros((3,3)); a[2,0] = 1e-5; b[0,2] = 2e-5
+    wcs.sip = Sip(a,b,None,None,wcs.wcs.crpix)
+    hdr = wcs.to_header(relax=True)
+    data = np.arange(100*120*3,dtype='float32').reshape(100,120,3)
+    cropped, header = engine.crop_image(data,hdr,left=11,right=9,top=13,bottom=7)
+    np.testing.assert_array_equal(cropped,data[13:93,11:111])
+    coordinates=np.array([[0,0],[50,40],[99,79]])
+    np.testing.assert_allclose(WCS(header).all_pix2world(coordinates,0),wcs.all_pix2world(coordinates+[11,13],0),atol=1e-10)
+    path=tmp_path/'crop.fits';engine.save(path,cropped,engine.render(cropped),header)
+    result, saved_header=engine.read_fits(path)
+    np.testing.assert_array_equal(result,cropped)
+    assert saved_header['NAXIS1']==100 and saved_header['NAXIS2']==80
+    assert hdr['CRPIX1']==70
+    with pytest.raises(ValueError):engine.crop_image(data,hdr,left=120)

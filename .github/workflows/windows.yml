@@ -14,7 +14,7 @@ jobs:
       - run: python -m pytest -q
       - name: Remove test runner before freezing runtime
         run: python -m pip uninstall -y pytest
-      - run: python -m PyInstaller --noconfirm --windowed --name SeestarStudio --hidden-import sep --collect-submodules skimage.transform app.py
+      - run: python -m PyInstaller --noconfirm --windowed --name SeestarStudio --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
       - name: Test packaged application
         shell: pwsh
         run: |
@@ -27,7 +27,7 @@ jobs:
       - name: Verify Program Files install and desktop shortcut
         shell: pwsh
         run: |
-          $setup = Start-Process -FilePath installer/SeestarStudio-0.3.1-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $setup = Start-Process -FilePath installer/SeestarStudio-0.4.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           $installed = Join-Path $env:ProgramFiles 'Seestar Studio/SeestarStudio.exe'
           if (-not (Test-Path $installed)) { throw 'Application missing from native Program Files' }

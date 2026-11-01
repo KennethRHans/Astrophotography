@@ -1,7 +1,27 @@
-# Seestar Studio — preview 0.3.1
+# Seestar Studio — preview 0.4
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
-Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
+Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
+
+## Optional GPU adjustments (0.4)
+Check Use GPU for adjustments to accelerate stretching, saturation and Gaussian
+noise smoothing using OpenCL. Install a current NVIDIA graphics driver; no CUDA
+toolkit is needed. The log identifies the selected GPU. If initialization or
+processing fails, the app returns to CPU processing and explains why in the log.
+This setting starts off and is experimental. Star matching, registration,
+stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
+Transfers and CPU work may outweigh GPU savings for small previews or when
+smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Cropping (0.4)
+Drag a rectangle on the image, or enter Left/Right/Top/Bottom margins in pixels,
+then click Apply crop. Crops affect the preview and all exports, including FITS.
+Restore full frame returns to the loaded image without changing your sliders.
+Reset adjustments resets sliders and Compare, and keeps your crop.
+Cropping trims pixels; it does not improve noise inside the retained area.
+FITS reference pixels are shifted to retain WCS and SIP sky coordinates.
+The original files remain untouched. Only the currently loaded image can be restored;
+a cropped file reopened later does not contain the pixels removed on export.
 
 ## Reset adjustments (0.3.1)
 Use Reset adjustments to restore all eight sliders to their starting values and
@@ -84,7 +104,7 @@ Export and single-frame load can briefly pause the GUI on large files.
 
 This preview has no dark/flat/bias calibration, automatic frame quality ranking,
 photometric color calibration, sharpening, project saving,
-GPU acceleration or automatic updates. Background percentile subtraction is a
+automatic updates. Background percentile subtraction is a
 simple artistic adjustment and can suppress faint signal: keep linear FITS.
 No AI-generated detail is added. Outlier rejection is limited with very few frames.
 Alignment/interpolation and noise smoothing alter pixels; inspect results critically.

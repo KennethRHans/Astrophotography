@@ -5,6 +5,47 @@ import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 
+class CropPreview(W.QLabel):
+    selection = QtCore.Signal(int, int, int, int)
+    def __init__(self, text):
+        super().__init__(text)
+        self.source_size = None
+        self.drag_start = None
+        self.band = W.QRubberBand(W.QRubberBand.Rectangle, self)
+        self.setCursor(QtCore.Qt.CrossCursor)
+    def image_rect(self):
+        pixmap = self.pixmap()
+        if pixmap is None or pixmap.isNull():
+            return QtCore.QRect()
+        return QtCore.QRect((self.width()-pixmap.width())//2,
+                            (self.height()-pixmap.height())//2,
+                            pixmap.width(), pixmap.height())
+    def mousePressEvent(self, event):
+        point = event.position().toPoint()
+        if event.button() == QtCore.Qt.LeftButton and self.source_size and self.image_rect().contains(point):
+            self.drag_start = point
+            self.band.setGeometry(QtCore.QRect(point, QtCore.QSize()))
+            self.band.show()
+    def mouseMoveEvent(self, event):
+        if self.drag_start is not None:
+            self.band.setGeometry(QtCore.QRect(self.drag_start, event.position().toPoint()).normalized().intersected(self.image_rect()))
+    def mouseReleaseEvent(self, event):
+        if self.drag_start is None or event.button() != QtCore.Qt.LeftButton:
+            return
+        rect = QtCore.QRect(self.drag_start, event.position().toPoint()).normalized().intersected(self.image_rect())
+        self.drag_start = None
+        if rect.width() < 3 or rect.height() < 3:
+            self.band.hide()
+            return
+        bounds = self.image_rect()
+        w, h = self.source_size
+        x0 = max(0, int(np.floor((rect.x()-bounds.x())*w/bounds.width())))
+        y0 = max(0, int(np.floor((rect.y()-bounds.y())*h/bounds.height())))
+        x1 = min(w, int(np.ceil((rect.x()+rect.width()-bounds.x())*w/bounds.width())))
+        y1 = min(h, int(np.ceil((rect.y()+rect.height()-bounds.y())*h/bounds.height())))
+        self.selection.emit(x0, y0, x1, y1)
+
+
 class Worker(QtCore.QThread):
     message = QtCore.Signal(str)
     result = QtCore.Signal(object, object)
@@ -23,10 +64,11 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.3.1')
+        self.setWindowTitle('Seestar Studio • Preview 0.4')
         self.resize(1200, 800)
         self.linear = self.header = self.rendered = None
         self.worker = None
+        self.gpu = None
         root = W.QWidget(); self.setCentralWidget(root)
         layout = W.QHBoxLayout(root)
         controls = W.QWidget()
@@ -59,9 +101,23 @@ class Window(W.QMainWindow):
         self.reset.setToolTip('Restore all sliders to their starting values')
         self.reset.clicked.connect(self.reset_adjustments)
         sidebar.addWidget(self.reset)
+        self.use_gpu = W.QCheckBox('Use GPU for adjustments (experimental)')
+        self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
+        self.use_gpu.toggled.connect(self.toggle_gpu); sidebar.addWidget(self.use_gpu)
+        self.crop_group = W.QGroupBox('Crop — drag on the image or trim edges')
+        crop_layout = W.QFormLayout(self.crop_group)
+        self.crop_margins = {}
+        for edge in ('Left', 'Right', 'Top', 'Bottom'):
+            spin = W.QSpinBox(); spin.setRange(0, 0); spin.setSuffix(' px')
+            crop_layout.addRow(edge, spin); self.crop_margins[edge] = spin
+        self.apply_crop = W.QPushButton('Apply crop'); self.apply_crop.clicked.connect(self.crop_selected)
+        self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
+        crop_layout.addRow(self.apply_crop); crop_layout.addRow(self.restore_crop)
+        self.crop_group.setEnabled(False); sidebar.addWidget(self.crop_group)
         self.export = W.QPushButton('Export FITS / 16-bit TIFF / PNG…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
-        self.preview = W.QLabel('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
+        self.preview = CropPreview('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
+        self.preview.selection.connect(self.select_crop)
         self.progress_text = W.QLabel('Ready'); right.addWidget(self.progress_text)
         self.progress_bar = W.QProgressBar(); self.progress_bar.setRange(0, 100); self.progress_bar.setValue(0); right.addWidget(self.progress_bar)
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
@@ -111,12 +167,69 @@ class Window(W.QMainWindow):
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
     def loaded(self, linear, header):
+        self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
+        self.reset_crop_controls()
         self.background = engine.background_model(linear)
         self.export.setEnabled(True)
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))
+        self.update_preview()
+    def toggle_gpu(self, enabled):
+        self.gpu = None
+        if enabled:
+            try:
+                from gpu import GpuProcessor
+                self.gpu = GpuProcessor()
+                self.log.appendPlainText('GPU adjustments enabled: '+self.gpu.name)
+                self.statusBar().showMessage('GPU adjustments: '+self.gpu.name+' • Alignment/stacking: CPU')
+            except Exception as exc:
+                self.use_gpu.blockSignals(True); self.use_gpu.setChecked(False); self.use_gpu.blockSignals(False)
+                self.log.appendPlainText('Using CPU: '+str(exc))
+                self.statusBar().showMessage('CPU processing • GPU unavailable')
+        else:
+            self.log.appendPlainText('CPU adjustments selected.')
+            self.statusBar().showMessage('CPU processing')
+        self.update_preview()
+    def report_gpu_failure(self):
+        if self.gpu is not None and self.gpu.disabled:
+            self.log.appendPlainText('GPU adjustments failed; CPU result used: '+self.gpu.last_error)
+            self.use_gpu.blockSignals(True); self.use_gpu.setChecked(False); self.use_gpu.blockSignals(False)
+            self.gpu = None
+            self.statusBar().showMessage('CPU processing • GPU fallback')
+    def reset_crop_controls(self):
+        h, w, _ = self.linear.shape
+        self.crop_group.setEnabled(True)
+        for name, spin in self.crop_margins.items():
+            spin.setMaximum((w if name in ('Left', 'Right') else h)-1)
+            spin.setValue(0)
+        self.preview.band.hide()
+    def select_crop(self, x0, y0, x1, y1):
+        h, w, _ = self.linear.shape
+        for name, value in zip(('Left', 'Right', 'Top', 'Bottom'), (x0, w-x1, y0, h-y1)):
+            self.crop_margins[name].setValue(value)
+    def crop_selected(self):
+        if self.linear is None:
+            return
+        margins = {name.lower(): spin.value() for name, spin in self.crop_margins.items()}
+        if not any(margins.values()):
+            return
+        try:
+            self.linear, self.header = engine.crop_image(self.linear, self.header, **margins)
+        except ValueError as exc:
+            W.QMessageBox.information(self, 'Adjust crop', str(exc)); return
+        self.background = engine.background_model(self.linear)
+        self.reset_crop_controls()
+        self.log.appendPlainText(f'Crop applied: {self.linear.shape[1]} × {self.linear.shape[0]} pixels. Restore full frame is available.')
+        self.update_preview()
+    def restore_full_frame(self):
+        if self.linear is None:
+            return
+        self.linear, self.header = self.original_linear, self.original_header.copy()
+        self.background = engine.background_model(self.linear)
+        self.reset_crop_controls()
+        self.log.appendPlainText('Full frame restored. Adjustments preserved.')
         self.update_preview()
     def reset_adjustments(self):
         for name, slider in self.sliders.items():
@@ -133,19 +246,24 @@ class Window(W.QMainWindow):
         # Interactive display is reduced; export always renders at native resolution.
         step = max(1, int(np.ceil(max(self.linear.shape[:2])/1400)))
         small = cv2.resize(self.linear, (max(1, self.linear.shape[1]//step), max(1, self.linear.shape[0]//step)), interpolation=cv2.INTER_AREA)
-        preview = engine.render(small, *self.settings(), model=self.background)
+        preview = engine.render(small, *self.settings(), model=self.background, gpu=self.gpu)
+        self.report_gpu_failure()
         pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
         image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
+        self.preview.source_size = (self.linear.shape[1], self.linear.shape[0])
+        self.preview.band.hide()
         self.pixmap = QtGui.QPixmap.fromImage(image)
         self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'pixmap'): self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
     def save(self):
-        path, _ = W.QFileDialog.getSaveFileName(self, 'Export (FITS saves linear data)', 'image.tif', '16-bit TIFF (*.tif);;PNG (*.png);;Linear FITS (*.fits)')
+        path, _ = W.QFileDialog.getSaveFileName(self, 'Export (FITS saves linear data)', str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation))/'image.tif'), '16-bit TIFF (*.tif);;PNG (*.png);;Linear FITS (*.fits)')
         if not path: return
         try:
-            engine.save(path, self.linear, engine.render(self.linear, *self.settings(), model=self.background), self.header)
+            rendered = None if Path(path).suffix.lower() in ('.fit', '.fits') else engine.render(self.linear, *self.settings(), model=self.background, gpu=self.gpu)
+            engine.save(path, self.linear, rendered, self.header)
+            self.report_gpu_failure()
             self.log.appendPlainText('Saved '+path)
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
     def closeEvent(self, event):
@@ -168,6 +286,12 @@ if __name__ == '__main__':
         sample[20:30, 20:30] = 500
         window.loaded(sample, fits.Header())
         window.sliders['Background correction %'].setValue(50)
+        window.reset.click()
+        window.crop_margins['Left'].setValue(5)
+        window.apply_crop.click()
+        assert window.linear.shape == (60, 75, 3)
+        window.restore_crop.click()
+        assert window.linear.shape == sample.shape
         window.update_preview()
         app.processEvents()
         window.close()

@@ -1,7 +1,7 @@
 [Setup]
 AppId=Seestar Studio Preview
 AppName=Seestar Studio Preview
-AppVersion=0.3.1
+AppVersion=0.4.0
 DefaultDirName={autopf}\Seestar Studio
 UsePreviousAppDir=no
 DefaultGroupName=Seestar Studio
@@ -9,7 +9,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=installer
-OutputBaseFilename=SeestarStudio-0.3.1-Setup
+OutputBaseFilename=SeestarStudio-0.4.0-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
