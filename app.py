@@ -22,7 +22,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.2')
+        self.setWindowTitle('Seestar Studio • Preview 0.3')
         self.resize(1200, 800)
         self.linear = self.header = self.rendered = None
         self.worker = None
@@ -124,6 +124,9 @@ class Window(W.QMainWindow):
         else: event.accept()
 
 if __name__ == '__main__':
+    if sys.platform == 'win32':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SeestarStudio.Desktop')
     app = W.QApplication(sys.argv)
     app.setStyle('Fusion')
     window = Window(); window.show()

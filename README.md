@@ -1,9 +1,21 @@
-# Seestar Studio — preview 0.2
+# Seestar Studio — preview 0.3
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
 
-## Download and install
+## Installation changes in 0.3
+The 64-bit installer now defaults to C:\Program Files\Seestar Studio and
+requires administrator approval. It offers an optional desktop shortcut and
+creates a Start Menu shortcut. At the end, choose Launch, then right-click the
+running app's taskbar icon and select Pin to taskbar. Windows manages pinning;
+the installer does not change your taskbar automatically.
+
+If upgrading from the per-user 0.2 preview, uninstall the old Seestar Studio
+Preview through Windows Settings > Apps > Installed apps first. The new installer
+does not automatically remove another user account's installation or shortcuts.
+Your FITS files are not stored in the program folder.
+
+## Previous preview download (0.2)
 [Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41343270976/artifacts/13097859357)
 (about 261 MiB; GitHub sign-in may be required). Extract the ZIP, then open
 installer/SeestarStudio-0.2.0-Setup.exe. Python is not required to use the app.
