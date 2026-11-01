@@ -209,6 +209,26 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     return image
 
 
+def fit_crop_ratio(bounds, ratio):
+    """Center the largest exact integer-ratio rectangle inside pixel bounds."""
+    from math import gcd
+    x0, y0, x1, y1 = map(int, bounds)
+    if x1 <= x0 or y1 <= y0:
+        raise ValueError('Crop must have positive width and height.')
+    if ratio is None:
+        return x0, y0, x1, y1
+    rw, rh = map(int, ratio)
+    if rw <= 0 or rh <= 0:
+        raise ValueError('Crop ratio must be positive.')
+    factor = gcd(rw, rh); rw //= factor; rh //= factor
+    multiple = min((x1-x0)//rw, (y1-y0)//rh)
+    if multiple < 1:
+        raise ValueError('Selection is too small for this pixel ratio.')
+    width, height = rw*multiple, rh*multiple
+    left, top = x0+((x1-x0)-width)//2, y0+((y1-y0)-height)//2
+    return left, top, left+width, top+height
+
+
 def crop_image(linear, header, left=0, right=0, top=0, bottom=0):
     """Crop RGB pixels and shift FITS WCS reference pixels without resampling."""
     h, w, _ = linear.shape

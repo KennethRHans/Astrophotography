@@ -1,4 +1,4 @@
-# Seestar Studio — preview 0.4
+# Seestar Studio — preview 0.5
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
@@ -12,6 +12,18 @@ This setting starts off and is experimental. Star matching, registration,
 stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Crop alignment and ratios (0.5)
+Choose Free, Original, Square, 4:3, 3:2, 16:9 or the portrait equivalents.
+Selecting a fixed ratio centers the largest matching crop inside the current
+selection. Dragging keeps that ratio; edge pixel controls also maintain it.
+Fixed ratios use exact whole-pixel multiples, so Original may move in larger
+steps for unusual image dimensions. Choose Free for single-pixel control.
+Thirds, center or a 10-by-10 grid plus pixel rulers help align the selection.
+Rulers are pixel positions in the currently displayed frame. The crop label
+shows exact width, height and top-left position. Guides never appear in exports.
+To start a different ratio from the full image, choose Restore full frame.
+These controls crop pixels; they do not resample the image to a smaller resolution.
 
 ## Cropping (0.4)
 Drag a rectangle on the image, or enter Left/Right/Top/Bottom margins in pixels,
@@ -135,4 +147,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-

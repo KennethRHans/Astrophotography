@@ -130,3 +130,14 @@ def test_crop_preserves_pixels_and_sky_coordinates(tmp_path):
     assert saved_header['NAXIS1']==100 and saved_header['NAXIS2']==80
     assert hdr['CRPIX1']==70
     with pytest.raises(ValueError):engine.crop_image(data,hdr,left=120)
+
+
+def test_ratio_crop_exact_pixels_and_bounds():
+    for ratio in [(1,1),(4,3),(3,2),(16,9),(3,4),(2,3),(9,16),(2160,3840)]:
+        x0,y0,x1,y1=engine.fit_crop_ratio((17,29,2023,3711),ratio)
+        assert (x1-x0)*ratio[1] == (y1-y0)*ratio[0]
+        assert 17<=x0<x1<=2023 and 29<=y0<y1<=3711
+        assert abs((x0-17)-(2023-x1)) <= 1
+        assert abs((y0-29)-(3711-y1)) <= 1
+    assert engine.fit_crop_ratio((2,3,10,11),None)==(2,3,10,11)
+    with pytest.raises(ValueError):engine.fit_crop_ratio((0,0,2,2),(16,9))

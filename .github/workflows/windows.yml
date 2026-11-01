@@ -27,7 +27,7 @@ jobs:
       - name: Verify Program Files install and desktop shortcut
         shell: pwsh
         run: |
-          $setup = Start-Process -FilePath installer/SeestarStudio-0.4.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $setup = Start-Process -FilePath installer/SeestarStudio-0.5.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           $installed = Join-Path $env:ProgramFiles 'Seestar Studio/SeestarStudio.exe'
           if (-not (Test-Path $installed)) { throw 'Application missing from native Program Files' }

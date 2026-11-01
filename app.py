@@ -11,7 +11,13 @@ class CropPreview(W.QLabel):
         super().__init__(text)
         self.source_size = None
         self.drag_start = None
-        self.band = W.QRubberBand(W.QRubberBand.Rectangle, self)
+        self.ratio = None
+        self.guide = 'Thirds + rulers'
+        self.selection_pixels = None
+        self.band = W.QFrame(self)
+        self.band.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.band.setStyleSheet('background: transparent; border: 1px solid #5ae6ff;')
+        self.band.hide()
         self.setCursor(QtCore.Qt.CrossCursor)
     def image_rect(self):
         pixmap = self.pixmap()
@@ -20,30 +26,85 @@ class CropPreview(W.QLabel):
         return QtCore.QRect((self.width()-pixmap.width())//2,
                             (self.height()-pixmap.height())//2,
                             pixmap.width(), pixmap.height())
+    def selection_rect(self):
+        area = self.image_rect()
+        if not self.source_size or not self.selection_pixels or area.isEmpty():
+            return area
+        w, h = self.source_size
+        x0,y0,x1,y1 = self.selection_pixels
+        return QtCore.QRect(round(area.x()+x0*area.width()/w), round(area.y()+y0*area.height()/h),
+                            max(1,round((x1-x0)*area.width()/w)), max(1,round((y1-y0)*area.height()/h)))
+    def update_band(self):
+        if self.selection_pixels and self.source_size:
+            w,h = self.source_size
+            if self.selection_pixels != (0,0,w,h):
+                self.band.setGeometry(self.selection_rect()); self.band.show()
+            else:
+                self.band.hide()
+        else:
+            self.band.hide()
+        self.update()
+    def pixels_at(self, point):
+        bounds = self.image_rect(); w,h = self.source_size
+        x = int(np.floor((point.x()-bounds.x())*w/max(bounds.width(),1)))
+        y = int(np.floor((point.y()-bounds.y())*h/max(bounds.height(),1)))
+        return max(0,min(w,x)), max(0,min(h,y))
+    def drag_to(self, point):
+        x0,y0 = self.pixels_at(self.drag_start)
+        x1,y1 = self.pixels_at(point)
+        bounds = (min(x0,x1),min(y0,y1),max(x0,x1),max(y0,y1))
+        try:
+            self.selection_pixels = engine.fit_crop_ratio(bounds,self.ratio)
+        except ValueError:
+            return
+        self.update_band()
     def mousePressEvent(self, event):
         point = event.position().toPoint()
         if event.button() == QtCore.Qt.LeftButton and self.source_size and self.image_rect().contains(point):
             self.drag_start = point
-            self.band.setGeometry(QtCore.QRect(point, QtCore.QSize()))
-            self.band.show()
     def mouseMoveEvent(self, event):
         if self.drag_start is not None:
-            self.band.setGeometry(QtCore.QRect(self.drag_start, event.position().toPoint()).normalized().intersected(self.image_rect()))
+            self.drag_to(event.position().toPoint())
     def mouseReleaseEvent(self, event):
         if self.drag_start is None or event.button() != QtCore.Qt.LeftButton:
             return
-        rect = QtCore.QRect(self.drag_start, event.position().toPoint()).normalized().intersected(self.image_rect())
+        if (event.position().toPoint()-self.drag_start).manhattanLength() >= 3:
+            self.drag_to(event.position().toPoint())
+            if self.selection_pixels:
+                self.selection.emit(*self.selection_pixels)
         self.drag_start = None
-        if rect.width() < 3 or rect.height() < 3:
-            self.band.hide()
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        area = self.image_rect()
+        if area.isEmpty() or not self.source_size or self.guide == 'Off':
             return
-        bounds = self.image_rect()
-        w, h = self.source_size
-        x0 = max(0, int(np.floor((rect.x()-bounds.x())*w/bounds.width())))
-        y0 = max(0, int(np.floor((rect.y()-bounds.y())*h/bounds.height())))
-        x1 = min(w, int(np.ceil((rect.x()+rect.width()-bounds.x())*w/bounds.width())))
-        y1 = min(h, int(np.ceil((rect.y()+rect.height()-bounds.y())*h/bounds.height())))
-        self.selection.emit(x0, y0, x1, y1)
+        painter = QtGui.QPainter(self)
+        painter.setClipRect(area)
+        rect = self.selection_rect()
+        painter.setPen(QtGui.QPen(QtGui.QColor(90,230,255,180),1,QtCore.Qt.DashLine))
+        count = 3 if self.guide.startswith('Thirds') else 10 if self.guide.startswith('Grid') else 2
+        for part in range(1,count):
+            x=rect.x()+round(rect.width()*part/count); y=rect.y()+round(rect.height()*part/count)
+            painter.drawLine(x,rect.top(),x,rect.bottom())
+            painter.drawLine(rect.left(),y,rect.right(),y)
+        # Rulers are pixel positions in the current frame, never sky coordinates.
+        painter.fillRect(area.x(),area.y(),area.width(),18,QtGui.QColor(0,0,0,175))
+        painter.setPen(QtGui.QColor(220,250,255))
+        font=painter.font(); font.setPixelSize(11); painter.setFont(font)
+        w,h=self.source_size
+        for part in range(5):
+            fraction=part/4
+            x=area.x()+round((area.width()-1)*fraction)
+            y=area.y()+round((area.height()-1)*fraction)
+            painter.drawLine(x,area.top(),x,area.top()+5)
+            label=f'{round((w-1)*fraction):,}'
+            tx=min(x+2,area.right()-painter.fontMetrics().horizontalAdvance(label))
+            painter.drawText(tx,area.top()+15,label)
+            if part:
+                label=f'{round((h-1)*fraction):,}'
+                painter.fillRect(area.left(),max(area.top(),y-13),painter.fontMetrics().horizontalAdvance(label)+5,15,QtGui.QColor(0,0,0,175))
+                painter.drawText(area.left()+3,min(y,area.bottom()-1),label)
+        painter.end()
 
 
 class Worker(QtCore.QThread):
@@ -64,7 +125,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.4')
+        self.setWindowTitle('Seestar Studio • Preview 0.5')
         self.resize(1200, 800)
         self.linear = self.header = self.rendered = None
         self.worker = None
@@ -106,9 +167,19 @@ class Window(W.QMainWindow):
         self.use_gpu.toggled.connect(self.toggle_gpu); sidebar.addWidget(self.use_gpu)
         self.crop_group = W.QGroupBox('Crop — drag on the image or trim edges')
         crop_layout = W.QFormLayout(self.crop_group)
+        self.crop_ratio = W.QComboBox()
+        for title, ratio in [('Free',None),('Original', 'original'),('Square (1:1)',(1,1)),('4:3',(4,3)),('3:2',(3,2)),('16:9',(16,9)),('3:4 portrait',(3,4)),('2:3 portrait',(2,3)),('9:16 portrait',(9,16))]:
+            self.crop_ratio.addItem(title,ratio)
+        self.crop_ratio.currentIndexChanged.connect(self.ratio_changed)
+        crop_layout.addRow('Aspect ratio',self.crop_ratio)
+        self.guides = W.QComboBox(); self.guides.addItems(['Thirds + rulers','Center + rulers','Grid 10 × 10 + rulers','Off'])
+        self.guides.currentTextChanged.connect(self.guides_changed)
+        crop_layout.addRow('Alignment guides',self.guides)
+        self.crop_dimensions = W.QLabel('No image loaded'); crop_layout.addRow(self.crop_dimensions)
         self.crop_margins = {}
         for edge in ('Left', 'Right', 'Top', 'Bottom'):
-            spin = W.QSpinBox(); spin.setRange(0, 0); spin.setSuffix(' px')
+            spin = W.QSpinBox(); spin.setRange(0, 0); spin.setSuffix(' px'); spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(self.crop_margins_changed)
             crop_layout.addRow(edge, spin); self.crop_margins[edge] = spin
         self.apply_crop = W.QPushButton('Apply crop'); self.apply_crop.clicked.connect(self.crop_selected)
         self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
@@ -198,17 +269,49 @@ class Window(W.QMainWindow):
             self.use_gpu.blockSignals(True); self.use_gpu.setChecked(False); self.use_gpu.blockSignals(False)
             self.gpu = None
             self.statusBar().showMessage('CPU processing • GPU fallback')
+    def active_crop_ratio(self):
+        ratio=self.crop_ratio.currentData()
+        if ratio == 'original':
+            return (self.original_linear.shape[1],self.original_linear.shape[0])
+        return ratio
+    def guides_changed(self, text):
+        self.preview.guide = text; self.preview.update()
+    def ratio_changed(self):
+        if self.linear is None:
+            return
+        self.preview.ratio=self.active_crop_ratio()
+        self.crop_margins_changed()
     def reset_crop_controls(self):
-        h, w, _ = self.linear.shape
+        h,w,_=self.linear.shape
         self.crop_group.setEnabled(True)
-        for name, spin in self.crop_margins.items():
-            spin.setMaximum((w if name in ('Left', 'Right') else h)-1)
-            spin.setValue(0)
-        self.preview.band.hide()
+        for name,spin in self.crop_margins.items():
+            spin.blockSignals(True)
+            spin.setMaximum((w if name in ('Left','Right') else h)-1); spin.setValue(0)
+            spin.blockSignals(False)
+        self.preview.source_size=(w,h)
+        self.preview.ratio=self.active_crop_ratio()
+        self.crop_margins_changed()
+    def crop_margins_changed(self):
+        if self.linear is None:
+            return
+        h,w,_=self.linear.shape
+        margins={name:spin.value() for name,spin in self.crop_margins.items()}
+        bounds=(margins['Left'],margins['Top'],w-margins['Right'],h-margins['Bottom'])
+        try:
+            self.select_crop(*engine.fit_crop_ratio(bounds,self.active_crop_ratio()))
+            self.apply_crop.setEnabled(True)
+        except ValueError as exc:
+            self.crop_dimensions.setText(str(exc)); self.apply_crop.setEnabled(False)
     def select_crop(self, x0, y0, x1, y1):
-        h, w, _ = self.linear.shape
-        for name, value in zip(('Left', 'Right', 'Top', 'Bottom'), (x0, w-x1, y0, h-y1)):
+        h,w,_=self.linear.shape
+        for name,value in zip(('Left','Right','Top','Bottom'),(x0,w-x1,y0,h-y1)):
+            self.crop_margins[name].blockSignals(True)
             self.crop_margins[name].setValue(value)
+            self.crop_margins[name].blockSignals(False)
+        self.apply_crop.setEnabled(True)
+        self.preview.selection_pixels=(x0,y0,x1,y1)
+        self.crop_dimensions.setText(f'Crop: {x1-x0:,} × {y1-y0:,} px • X {x0:,}, Y {y0:,}')
+        self.preview.update_band()
     def crop_selected(self):
         if self.linear is None:
             return
@@ -251,12 +354,14 @@ class Window(W.QMainWindow):
         pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
         image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
         self.preview.source_size = (self.linear.shape[1], self.linear.shape[0])
-        self.preview.band.hide()
         self.pixmap = QtGui.QPixmap.fromImage(image)
         self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+        self.preview.update_band()
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, 'pixmap'): self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+        if hasattr(self, 'pixmap'):
+            self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+            self.preview.update_band()
     def save(self):
         path, _ = W.QFileDialog.getSaveFileName(self, 'Export (FITS saves linear data)', str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation))/'image.tif'), '16-bit TIFF (*.tif);;PNG (*.png);;Linear FITS (*.fits)')
         if not path: return
@@ -292,6 +397,10 @@ if __name__ == '__main__':
         assert window.linear.shape == (60, 75, 3)
         window.restore_crop.click()
         assert window.linear.shape == sample.shape
+        window.crop_ratio.setCurrentText('16:9')
+        window.apply_crop.click()
+        assert window.linear.shape[1]*9 == window.linear.shape[0]*16
+        window.restore_crop.click()
         window.update_preview()
         app.processEvents()
         window.close()
