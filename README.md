@@ -87,7 +87,17 @@ a cropped file reopened later does not contain the pixels removed on export.
 Use Reset adjustments to restore all eight sliders to their starting values and
 turn off Compare. The loaded image and exposure list are preserved.
 
-## Latest Windows download (0.7)
+## Latest Windows download (0.8)
+[Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41362474358/artifacts/13106225612).
+Close the app, extract and run installer/SeestarStudio-0.8.0-Setup.exe.
+This release includes the black application background, dark blue step panels,
+brighter text, unindented disclaimer and the supplied cartoon bundled in the
+header. The old photo-selection control is removed. Windows tests, packaged GUI
+and JPEG export, Program Files installation, desktop shortcut, and installed-app
+launch checks passed. Both packaged and installed checks require the bundled
+artwork to be present and load successfully. This preview remains unsigned.
+
+## Previous Windows download (0.7)
 [Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41358387168/artifacts/13103942956).
 Close the app, extract and run installer/SeestarStudio-0.7.0-Setup.exe.
 Windows processing/GUI tests, the packaged app including JPG save/reopen, Program
@@ -224,3 +234,4 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
+
