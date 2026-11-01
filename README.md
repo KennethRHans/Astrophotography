@@ -3,6 +3,12 @@
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
 
+## Progress display
+A progress bar above the activity log shows alignment percentage, processed
+frames and frames remaining. Skipped frames count as processed, not accepted.
+The bar restarts for the image-row combining phase. These are work counts, not
+estimated time remaining. Completion reaches 100% when the result is available.
+
 ## Installation changes in 0.3
 The 64-bit installer now defaults to C:\Program Files\Seestar Studio and
 requires administrator approval. It offers an optional desktop shortcut and

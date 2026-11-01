@@ -23,8 +23,9 @@ Name: "{autodesktop}\Seestar Studio"; Filename: "{app}\SeestarStudio.exe"; Worki
 [Run]
 Filename: "{app}\SeestarStudio.exe"; Description: "Launch Seestar Studio (right-click its taskbar icon to pin it)"; Flags: nowait postinstall skipifsilent runasoriginaluser
 [Code]
-procedure InitializeWizard;
+procedure CurPageChanged(CurPageID: Integer);
 begin
+  if CurPageID <> wpFinished then Exit;
   WizardForm.FinishedLabel.Caption :=
     'Seestar Studio has been installed.' + #13#10 + #13#10 +
     'To pin it to the taskbar: launch Seestar Studio, right-click its taskbar icon, and choose Pin to taskbar.';

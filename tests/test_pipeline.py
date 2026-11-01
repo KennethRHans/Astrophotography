@@ -46,7 +46,11 @@ def test_align_rotated_translated_stars_and_reduce_noise(tmp_path):
         image += rng.normal(0, 3, image.shape)
         path = tmp_path/f'{i}.fits'
         fits.writeto(path, image.astype('float32'), fits.Header({'EXPTIME':20., 'TOTALEXP':20.})); paths.append(path)
-    result, header = engine.stack(paths)
+    events = []
+    result, header = engine.stack(paths, report_progress=lambda done, total, phase: events.append((done, total, phase)))
+    assert events[0] == (1, 8, "Aligning exposures")
+    assert (8, 8, "Aligning exposures") in events
+    assert events[-1] == (180, 180, "Combining image rows")
     assert header['NCOMBINE'] >= 6
     assert header['TOTALEXP'] == header['NCOMBINE'] * 20.
     # Central field must recover the same star locations, with less noise.

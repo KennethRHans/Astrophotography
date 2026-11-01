@@ -8,13 +8,14 @@ import engine
 class Worker(QtCore.QThread):
     message = QtCore.Signal(str)
     result = QtCore.Signal(object, object)
+    progress = QtCore.Signal(int, int, str)
     failed = QtCore.Signal(str)
     def __init__(self, paths, bayer, single=False):
         super().__init__()
         self.paths, self.bayer, self.single = paths, bayer, single
     def run(self):
         try:
-            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested)
+            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested, self.progress.emit)
             self.result.emit(*result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -55,6 +56,8 @@ class Window(W.QMainWindow):
         self.export = W.QPushButton('Export FITS / 16-bit TIFF / PNG…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
         self.preview = W.QLabel('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
+        self.progress_text = W.QLabel('Ready'); right.addWidget(self.progress_text)
+        self.progress_bar = W.QProgressBar(); self.progress_bar.setRange(0, 100); self.progress_bar.setValue(0); right.addWidget(self.progress_bar)
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
@@ -76,12 +79,27 @@ class Window(W.QMainWindow):
         self.log.appendPlainText('Starting. Alignment uses the first listed exposure as reference.\nTemporary disk space needed: approximately 12 bytes × pixels × frames.')
         for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(False)
         self.cancel.setEnabled(True)
+        self.progress_bar.setRange(0, 0)
+        self.progress_text.setText('Loading FITS image…' if single else 'Preparing exposures…')
         self.worker = Worker(paths, self.bayer.currentText(), single)
         self.worker.message.connect(self.log.appendPlainText)
+        self.worker.progress.connect(self.update_progress)
         self.worker.result.connect(self.loaded)
-        self.worker.failed.connect(lambda text: self.log.appendPlainText('Stopped: '+text))
+        self.worker.failed.connect(self.processing_failed)
         self.worker.finished.connect(self.finished)
         self.worker.start()
+    def update_progress(self, completed, total, stage):
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(completed)
+        percent = 100*completed//max(total, 1)
+        unit = 'frames' if stage == 'Aligning exposures' else 'rows'
+        self.progress_text.setText(f'{stage}: {completed:,}/{total:,} {unit} • {percent}% complete • {total-completed:,} remaining')
+    def processing_failed(self, text):
+        if self.progress_bar.maximum() == 0:
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+        self.progress_text.setText('Stopped: '+text)
+        self.log.appendPlainText('Stopped: '+text)
     def finished(self):
         for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(True)
         self.cancel.setEnabled(False)
@@ -90,6 +108,8 @@ class Window(W.QMainWindow):
         self.linear, self.header = linear, header
         self.background = engine.background_model(linear)
         self.export.setEnabled(True)
+        self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
+        self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))
         self.update_preview()
     def schedule_preview(self): self.timer.start(150)

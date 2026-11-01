@@ -59,7 +59,8 @@ def image_summary(data, header):
             f" • {count} exposure(s) • {float(exposure):g} seconds total")
 
 
-def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False):
+def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
+          report_progress=lambda completed, total, stage: None):
     if len(paths) < 2:
         raise ValueError('Select at least two individual exposures, or open one finished stack.')
     for path in paths:
@@ -73,6 +74,7 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False)
         try:
             frames[0] = reference
             accepted = 1
+            report_progress(1, len(paths), "Aligning exposures")
             total_exposure = float(header.get("EXPTIME", header.get("EXPOSURE", 0)))
             for i, path in enumerate(paths[1:], 1):
                 if cancelled():
@@ -90,9 +92,11 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False)
                     total_exposure += float(moving_header.get("EXPTIME", moving_header.get("EXPOSURE", 0)))
                 except (astroalign.MaxIterError, ValueError, RuntimeError) as exc:
                     progress(f'Skipped {Path(path).name}: {exc}')
+                report_progress(i+1, len(paths), 'Aligning exposures')
             if accepted < 2:
                 raise ValueError('Could not align a second exposure. Try a sharper reference frame first.')
             output = np.empty_like(reference)
+            report_progress(0, h, "Combining image rows")
             for y in range(0, h, 32):
                 if cancelled():
                     raise InterruptedError('Cancelled')
@@ -101,6 +105,7 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False)
                     warnings.simplefilter('ignore', RuntimeWarning)
                     block = sigma_clip(frames[:accepted, y:y+32], sigma=3, maxiters=3, axis=0)
                     output[y:y+32] = np.ma.mean(block, axis=0).filled(np.nan)
+                report_progress(min(y+32, h), h, "Combining image rows")
         finally:
             frames._mmap.close()
         del frames
