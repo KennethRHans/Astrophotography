@@ -40,6 +40,7 @@ __kernel void color_image(__global const float *src, __global float *dst,
 class GpuProcessor:
     def __init__(self, context=None):
         import pyopencl as cl
+        import pyopencl.invoker  # OpenCL extension imports this dynamically; include it in the frozen app.
         self.cl = cl
         if context is None:
             devices = []
