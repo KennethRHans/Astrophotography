@@ -1,9 +1,13 @@
-# Seestar Studio — preview 0.3
+# Seestar Studio — preview 0.3.1
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
 
-## Latest Windows download (0.3)
+## Reset adjustments (0.3.1)
+Use Reset adjustments to restore all eight sliders to their starting values and
+turn off Compare. The loaded image and exposure list are preserved.
+
+## Previous Windows download (0.3)
 [Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41344792997/artifacts/13099415398).
 Extract it and run installer/SeestarStudio-0.3.0-Setup.exe. The Windows runner
 passed all seven processing tests, packaged GUI launch, silent installation into
@@ -98,4 +102,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-

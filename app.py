@@ -23,7 +23,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.3')
+        self.setWindowTitle('Seestar Studio • Preview 0.3.1')
         self.resize(1200, 800)
         self.linear = self.header = self.rendered = None
         self.worker = None
@@ -45,14 +45,20 @@ class Window(W.QMainWindow):
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
         self.sliders = {}
+        self.slider_defaults = {}
         for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100)]:
             sidebar.addWidget(W.QLabel(label))
             slider = W.QSlider(QtCore.Qt.Horizontal); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
+            self.slider_defaults[label] = default
             slider.valueChanged.connect(self.schedule_preview)
             value = W.QLabel(str(default)); sidebar.addWidget(value)
             slider.valueChanged.connect(lambda n, widget=value: widget.setText(str(n)))
         hint = W.QLabel('Background correction can remove faint extended nebulosity.\nStart low and compare. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
+        self.reset = W.QPushButton('Reset adjustments')
+        self.reset.setToolTip('Restore all sliders to their starting values')
+        self.reset.clicked.connect(self.reset_adjustments)
+        sidebar.addWidget(self.reset)
         self.export = W.QPushButton('Export FITS / 16-bit TIFF / PNG…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
         self.preview = W.QLabel('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
@@ -111,6 +117,12 @@ class Window(W.QMainWindow):
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))
+        self.update_preview()
+    def reset_adjustments(self):
+        for name, slider in self.sliders.items():
+            slider.setValue(self.slider_defaults[name])
+        self.baseline.setChecked(False)
+        self.timer.stop()
         self.update_preview()
     def schedule_preview(self): self.timer.start(150)
     def settings(self):
