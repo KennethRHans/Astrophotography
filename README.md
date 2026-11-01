@@ -3,6 +3,13 @@
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
 
+## Latest Windows download (0.3)
+[Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41344792997/artifacts/13099415398).
+Extract it and run installer/SeestarStudio-0.3.0-Setup.exe. The Windows runner
+passed all seven processing tests, packaged GUI launch, silent installation into
+native Program Files, desktop shortcut creation, and installed GUI launch.
+Taskbar pinning remains a manual Windows action. This preview is unsigned.
+
 ## Progress display
 A progress bar above the activity log shows alignment percentage, processed
 frames and frames remaining. Skipped frames count as processed, not accepted.
@@ -91,3 +98,4 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
+
