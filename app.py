@@ -127,6 +127,15 @@ class Window(W.QMainWindow):
         super().__init__()
         self.setWindowTitle('Seestar Studio • Preview 0.5')
         self.resize(1200, 800)
+        self.setStyleSheet("""
+            QSlider::groove:horizontal { height: 8px; background: #b9c5cf; border-radius: 4px; }
+            QSlider::sub-page:horizontal { background: #2999ce; border-radius: 4px; }
+            QSlider::handle:horizontal { width: 24px; margin: -8px 0; background: #f5f9fc;
+                border: 2px solid #3d6d85; border-radius: 8px; }
+            QSlider::handle:horizontal:hover { background: #c4ecff; border-color: #147cae; }
+            QSlider::handle:horizontal:pressed { background: #8cd8fa; }
+        """)
+        self.source_name = 'image' 
         self.linear = self.header = self.rendered = None
         self.worker = None
         self.gpu = None
@@ -151,7 +160,7 @@ class Window(W.QMainWindow):
         self.slider_defaults = {}
         for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100)]:
             sidebar.addWidget(W.QLabel(label))
-            slider = W.QSlider(QtCore.Qt.Horizontal); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
+            slider = W.QSlider(QtCore.Qt.Horizontal); slider.setMinimumHeight(36); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
             self.slider_defaults[label] = default
             slider.valueChanged.connect(self.schedule_preview)
             value = W.QLabel(str(default)); sidebar.addWidget(value)
@@ -209,6 +218,7 @@ class Window(W.QMainWindow):
             paths = [self.files.item(i).text() for i in range(self.files.count())]
             if len(paths) < 2:
                 W.QMessageBox.information(self, 'Add exposures', 'Add at least two individual exposures.'); return
+        self.pending_source_name = Path(paths[0]).stem
         self.log.appendPlainText('Starting. Alignment uses the first listed exposure as reference.\nTemporary disk space needed: approximately 12 bytes × pixels × frames.')
         for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(False)
         self.cancel.setEnabled(True)
@@ -238,6 +248,7 @@ class Window(W.QMainWindow):
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
     def loaded(self, linear, header):
+        self.source_name = getattr(self, 'pending_source_name', 'image')
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
         self.reset_crop_controls()
@@ -363,7 +374,17 @@ class Window(W.QMainWindow):
             self.preview.setPixmap(self.pixmap.scaled(self.preview.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
             self.preview.update_band()
     def save(self):
-        path, _ = W.QFileDialog.getSaveFileName(self, 'Export (FITS saves linear data)', str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation))/'image.tif'), '16-bit TIFF (*.tif);;PNG (*.png);;Linear FITS (*.fits)')
+        folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
+        dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
+        dialog.setAcceptMode(W.QFileDialog.AcceptSave)
+        dialog.setFileMode(W.QFileDialog.AnyFile)
+        dialog.setNameFilters(['16-bit TIFF (*.tif)', 'PNG (*.png)', 'Linear FITS (*.fits)'])
+        dialog.setDefaultSuffix('tif')
+        dialog.selectFile(engine.export_basename(self.header, self.source_name))
+        dialog.filterSelected.connect(lambda selected: dialog.setDefaultSuffix('fits' if 'FITS' in selected else 'png' if 'PNG' in selected else 'tif'))
+        if dialog.exec() != W.QDialog.Accepted:
+            return
+        path = dialog.selectedFiles()[0]
         if not path: return
         try:
             rendered = None if Path(path).suffix.lower() in ('.fit', '.fits') else engine.render(self.linear, *self.settings(), model=self.background, gpu=self.gpu)

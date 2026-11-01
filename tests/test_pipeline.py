@@ -141,3 +141,15 @@ def test_ratio_crop_exact_pixels_and_bounds():
         assert abs((y0-29)-(3711-y1)) <= 1
     assert engine.fit_crop_ratio((2,3,10,11),None)==(2,3,10,11)
     with pytest.raises(ValueError):engine.fit_crop_ratio((0,0,2,2),(16,9))
+
+
+def test_export_names_for_windows():
+    assert engine.export_basename({'OBJECT':'C 56'})=='C56'
+    assert engine.export_basename({'OBJECT':'NGC 7000'})=='NGC7000'
+    assert engine.export_basename({'OBJECT':'Orion Nebula'})=='Orion_Nebula'
+    assert engine.export_basename({'OBJECT':'  '},'exposure-001')=='exposure-001'
+    assert engine.export_basename({'OBJECT':'CON'})=='Object_CON'
+    assert engine.export_basename({'OBJECT':'NUL.fits'})=='Object_NUL.fits'
+    name=engine.export_basename({'OBJECT':'../../C:56?*'})
+    assert '/' not in name and ':' not in name and '?' not in name
+    assert not name.endswith(('.', ' '))

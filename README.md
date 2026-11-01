@@ -13,6 +13,13 @@ stacking, FITS I/O, background fitting and percentile calculations remain on CPU
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
 
+## Easier adjustments and export names (0.5)
+Slider handles are larger, with more space to click and a hover highlight.
+Export starts with the FITS OBJECT name (C 56 becomes C56). Choose Linear FITS,
+TIFF or PNG and the save dialog adds the corresponding extension. The name is
+editable; missing object metadata falls back to the input filename. Names are
+cleaned for Windows filename rules. Saved FITS remains linear data.
+
 ## Crop alignment and ratios (0.5)
 Choose Free, Original, Square, 4:3, 3:2, 16:9 or the portrait equivalents.
 Selecting a fixed ratio centers the largest matching crop inside the current

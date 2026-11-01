@@ -251,6 +251,19 @@ def crop_image(linear, header, left=0, right=0, top=0, bottom=0):
     return cropped, hdr
 
 
+def export_basename(header, fallback='image'):
+    """Use the target name as a safe Windows filename, without an extension."""
+    import re
+    name = str(header.get('OBJECT', '')).strip() or str(fallback).strip() or 'image'
+    # Normalize common catalogue names: C 56 -> C56, NGC 7000 -> NGC7000.
+    name = re.sub(r'^([A-Za-z]+)\s+(\d+[A-Za-z]?)$', r'\1\2', name)
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
+    name = re.sub(r'\s+', '_', name).strip(' .')[:100].rstrip(' .') or 'image'
+    if name.split('.')[0].upper() in {'CON','PRN','AUX','NUL',*[f'COM{i}' for i in range(1,10)],*[f'LPT{i}' for i in range(1,10)]}:
+        name = 'Object_'+name
+    return name
+
+
 def save(path, linear, rendered, header):
     suffix = Path(path).suffix.lower()
     if suffix in ('.fit', '.fits'):
