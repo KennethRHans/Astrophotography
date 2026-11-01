@@ -20,7 +20,7 @@ class ImagePreview(W.QGraphicsView):
         self.mode = None
         self.pan_start = None
         self.setMouseTracking(True)
-        self.setBackgroundBrush(QtGui.QColor('#080e18'))
+        self.setBackgroundBrush(QtGui.QColor('#000000'))
         self.setFrameShape(W.QFrame.NoFrame)
         self.setTransformationAnchor(W.QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(W.QGraphicsView.AnchorViewCenter)

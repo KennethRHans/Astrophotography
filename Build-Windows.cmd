@@ -5,7 +5,7 @@ if errorlevel 1 goto fail
 .venv\Scripts\python -m pip install -r requirements.txt "pyinstaller>=6.16,<7"
 if errorlevel 1 goto fail
 .venv\Scripts\python -m pip uninstall -y pytest
-.venv\Scripts\python -m PyInstaller --noconfirm --clean --windowed --name SeestarStudio --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
+.venv\Scripts\python -m PyInstaller --noconfirm --clean --windowed --name SeestarStudio --add-data "assets;assets" --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
 if errorlevel 1 goto fail
 echo Ready: dist\SeestarStudio\SeestarStudio.exe
 pause

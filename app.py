@@ -34,41 +34,84 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.7')
+        self.setWindowTitle('Seestar Studio • Preview 0.8')
         self.resize(1200, 800)
+        app = W.QApplication.instance()
+        palette = QtGui.QPalette()
+        for role,color in [(QtGui.QPalette.Window,'#000000'),(QtGui.QPalette.WindowText,'#f1f6fd'),
+                           (QtGui.QPalette.Base,'#071321'),(QtGui.QPalette.AlternateBase,'#102640'),
+                           (QtGui.QPalette.Text,'#f1f6fd'),(QtGui.QPalette.Button,'#123252'),
+                           (QtGui.QPalette.ButtonText,'#f1f6fd'),(QtGui.QPalette.Highlight,'#247eb6'),
+                           (QtGui.QPalette.HighlightedText,'#ffffff'),(QtGui.QPalette.ToolTipBase,'#102640'),
+                           (QtGui.QPalette.ToolTipText,'#ffffff'),(QtGui.QPalette.Link,'#7bceff'),(QtGui.QPalette.Mid,'#789ab7'),
+                           (QtGui.QPalette.Light,'#a2c4e3'),(QtGui.QPalette.Dark,'#3c5878')]:
+            palette.setColor(role,QtGui.QColor(color))
+        for role in (QtGui.QPalette.WindowText,QtGui.QPalette.Text,QtGui.QPalette.ButtonText):
+            palette.setColor(QtGui.QPalette.Disabled,role,QtGui.QColor('#91a5bf'))
+        app.setPalette(palette)
         self.setStyleSheet("""
-            QGroupBox#stepLoad { border: 2px solid #4297c3; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #edf7fd; }
-            QGroupBox#stepAdjust { border: 2px solid #4c9a77; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #effaf4; }
-            QGroupBox#stepExport { border: 2px solid #9173b5; border-radius: 8px; margin-top: 16px; padding-top: 14px; background: #f6f0fc; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 1px 6px; }
-            QSlider::groove:horizontal { height: 8px; background: #b9c5cf; border-radius: 4px; }
-            QSlider::sub-page:horizontal { background: #2999ce; border-radius: 4px; }
-            QSlider::handle:horizontal { width: 24px; margin: -8px 0; background: #f5f9fc;
-                border: 2px solid #3d6d85; border-radius: 8px; }
-            QSlider::handle:horizontal:hover { background: #c4ecff; border-color: #147cae; }
-            QSlider::handle:horizontal:pressed { background: #8cd8fa; }
+            QMainWindow, QWidget#appCanvas, QWidget#controlPanel, QScrollArea { background: #000000; color: #f1f6fd; }
+            QScrollArea { border: none; }
+            QGroupBox#stepLoad, QGroupBox#stepAdjust, QGroupBox#stepExport {
+                border: 2px solid #3a6c9e; border-radius: 8px;
+                margin-top: 18px; padding-top: 16px; background: #0b2545;
+            }
+            QGroupBox#stepLoad::title, QGroupBox#stepAdjust::title, QGroupBox#stepExport::title {
+                subcontrol-origin: margin; left: 10px; padding: 2px 7px;
+                color: #ffffff; font-size: 15px; font-weight: bold;
+            }
+            QGroupBox { color: #f1f6fd; }
+            QLabel { color: #f1f6fd; background: transparent; }
+            QLabel:disabled { color: #91a5bf; }
+            QCheckBox { color: #f1f6fd; spacing: 7px; }
+            QCheckBox:disabled { color: #91a5bf; }
+            QPushButton, QToolButton {
+                background: #123252; color: #f1f6fd; border: 1px solid #476b95;
+                border-radius: 4px; padding: 5px 8px;
+            }
+            QPushButton:hover, QToolButton:hover { background: #1b466d; border-color: #74c8ff; }
+            QPushButton:pressed, QToolButton:pressed { background: #235a86; }
+            QPushButton:disabled, QToolButton:disabled { background: #0a192b; color: #91a5bf; border-color: #28415f; }
+            QComboBox, QSpinBox, QLineEdit, QListWidget, QPlainTextEdit {
+                background: #071321; color: #f1f6fd; border: 1px solid #3a5e86;
+                border-radius: 3px; padding: 3px; selection-background-color: #247eb6;
+                selection-color: #ffffff;
+            }
+            QComboBox QAbstractItemView { background: #102640; color: #f1f6fd; selection-background-color: #247eb6; }
+            QProgressBar { background: #071321; color: #ffffff; border: 1px solid #3a5e86; border-radius: 3px; text-align: center; }
+            QProgressBar::chunk { background: #247eb6; }
+            QSlider::groove:horizontal { height: 8px; background: #254668; border-radius: 4px; }
+            QSlider::sub-page:horizontal { background: #379cc3; border-radius: 4px; }
+            QSlider::handle:horizontal { width: 24px; margin: -8px 0; background: #def2ff;
+                border: 2px solid #5ec9ff; border-radius: 8px; }
+            QSlider::handle:horizontal:hover { background: #91d6ff; }
+            QSlider::handle:horizontal:pressed { background: #57bbef; }
         """)
         self.source_name = 'image' 
         self.linear = self.header = self.rendered = None
         self.worker = None
         self.gpu = None
-        root = W.QWidget(); self.setCentralWidget(root)
+        root = W.QWidget(); root.setObjectName('appCanvas'); self.setCentralWidget(root)
         layout = W.QHBoxLayout(root)
         left_column = W.QVBoxLayout(); layout.addLayout(left_column,1)
         header = W.QWidget(); header_row = W.QHBoxLayout(header); header_row.setContentsMargins(0,0,0,0)
-        self.photo_button = W.QToolButton(); self.photo_button.setText('🔭\nChoose photo'); self.photo_button.setFixedSize(84,84)
-        self.photo_button.setToolTip('Choose a local Seestar telescope photo for the header')
-        self.photo_button.clicked.connect(self.choose_header_photo); header_row.addWidget(self.photo_button)
+        self.header_art = W.QLabel(); self.header_art.setFixedSize(104,104)
+        self.header_art.setAlignment(QtCore.Qt.AlignCenter)
+        self.artwork_path = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'seestar-cartoon.png'
+        artwork=QtGui.QPixmap(str(self.artwork_path))
+        if not artwork.isNull():
+            self.header_art.setPixmap(artwork.scaled(104,104,QtCore.Qt.KeepAspectRatio,QtCore.Qt.SmoothTransformation))
+        else:
+            self.header_art.setText('Artwork pending')
+        header_row.addWidget(self.header_art)
         brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
         title = W.QLabel('Seestar Studio'); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
-        disclaimer = W.QLabel('Not affiliated with Suzhou ZWO Co., Ltd.'); disclaimer.setWordWrap(True); disclaimer.setContentsMargins(12,0,0,0); brand.addWidget(disclaimer)
+        disclaimer = W.QLabel('Not affiliated with Suzhou ZWO Co., Ltd.'); disclaimer.setWordWrap(True); disclaimer.setContentsMargins(0,0,0,0); brand.addWidget(disclaimer)
         left_column.addWidget(header)
-        self.settings_store = QtCore.QSettings('SeestarStudio','SeestarStudio')
-        self.load_header_photo(self.settings_store.value('headerPhoto',''))
         self.use_gpu = W.QCheckBox('Use GPU for image adjustments')
         self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
         self.use_gpu.toggled.connect(self.toggle_gpu); left_column.addWidget(self.use_gpu)
-        controls = W.QWidget()
+        controls = W.QWidget(); controls.setObjectName('controlPanel')
         sidebar = W.QVBoxLayout(controls)
         scroll = W.QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(controls)
         scroll.setMinimumWidth(360); left_column.addWidget(scroll,1)
@@ -157,14 +200,6 @@ class Window(W.QMainWindow):
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
-    def load_header_photo(self,path):
-        pixmap=QtGui.QPixmap(str(path)) if path else QtGui.QPixmap()
-        if not pixmap.isNull():
-            self.photo_button.setIcon(QtGui.QIcon(pixmap)); self.photo_button.setIconSize(QtCore.QSize(78,78)); self.photo_button.setText('')
-    def choose_header_photo(self):
-        path,_=W.QFileDialog.getOpenFileName(self,'Choose telescope photo','','Images (*.jpg *.jpeg *.png *.webp)')
-        if path:
-            self.load_header_photo(path); self.settings_store.setValue('headerPhoto',path)
     def zoom_changed(self,scale):
         self.zoom_label.setText(f'{scale*100:.0f}%')
         if hasattr(self,'timer'): self.schedule_preview()
@@ -366,6 +401,8 @@ if __name__ == '__main__':
     window = Window(); window.show()
     if '--smoke-test' in sys.argv:
         from astropy.io import fits
+        assert window.artwork_path.is_file(), 'Bundled header artwork missing'
+        assert window.header_art.pixmap() is not None and not window.header_art.pixmap().isNull(), 'Header artwork failed to load'
         sample = np.ones((60, 80, 3), dtype=np.float32)*100
         sample[20:30, 20:30] = 500
         window.loaded(sample, fits.Header())

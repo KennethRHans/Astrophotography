@@ -1,4 +1,4 @@
-# Seestar Studio — preview 0.7
+# Seestar Studio — preview 0.8
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
@@ -12,6 +12,13 @@ This setting starts off and is experimental. Star matching, registration,
 stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Dark appearance and supplied artwork (0.8)
+The application uses a black background and all three numbered steps use dark
+blue panels, with bright text and controls. The disclaimer is aligned with the
+app title, without its previous left indentation. The photo-selection control
+is replaced by a fixed, bundled illustration supplied by the project owner.
+The scientific processing and exported image colors are independent of the theme.
 
 ## Preview editing changes (0.7)
 Crop edges and corner handles are dragged directly in the image. Drag inside a
@@ -33,14 +40,11 @@ steps. Numbered sections have distinct colored borders/backgrounds and spacing.
 The top includes Instructions For Use, indented step numbers and the requested
 independent-project disclaimer under the name.
 
-## Telescope header photo
-The header has a Choose photo button for a local JPG/PNG/WebP telescope image.
-Your selection is remembered locally; it is not uploaded. No stock photo is
-bundled in 0.7: downloading the reusable source was blocked by the build workspace
-network policy. A suitable source is [Seestar S50 smart telescope](https://commons.wikimedia.org/wiki/File:Seestar_S50_smart_telescope.jpg),
-photographed by El Mexicano, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-If that photo is later bundled or modified, retain its credit and license, and
-indicate modifications. The current app does not contain that photo.
+## Bundled telescope illustration
+The project owner supplied the cartoon Seestar illustration displayed in the
+header. It is included in the installer, so users do not need to choose a photo.
+The original PNG is preserved; it is scaled only for display. The old photo
+selector and its saved photo preference are no longer used.
 
 ## Guided workflow (0.6)
 The controls are grouped under numbered headings matching the introduction:
@@ -220,4 +224,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-
