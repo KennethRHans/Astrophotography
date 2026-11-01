@@ -125,7 +125,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.5')
+        self.setWindowTitle('Seestar Studio • Preview 0.6')
         self.resize(1200, 800)
         self.setStyleSheet("""
             QSlider::groove:horizontal { height: 8px; background: #b9c5cf; border-radius: 4px; }
@@ -144,9 +144,15 @@ class Window(W.QMainWindow):
         controls = W.QWidget()
         sidebar = W.QVBoxLayout(controls)
         scroll = W.QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(controls)
-        scroll.setMinimumWidth(340); layout.addWidget(scroll, 1)
+        scroll.setMinimumWidth(360); layout.addWidget(scroll, 1)
+        self.sidebar_scroll = scroll
         title = W.QLabel('Seestar Studio'); title.setStyleSheet('font-size:26px; font-weight:bold'); sidebar.addWidget(title)
-        intro = W.QLabel('1. Add individual exposures to stack,\nor open an existing FITS stack.\n2. Adjust the preview.\n3. Export your image.'); sidebar.addWidget(intro)
+        intro = W.QLabel('1. Load or stack\n2. Adjust and crop\n3. Export'); sidebar.addWidget(intro)
+        outer_sidebar = sidebar
+        self.step_load = W.QGroupBox('1. Load or stack')
+        outer_sidebar.addWidget(self.step_load)
+        sidebar = W.QVBoxLayout(self.step_load)
+        load_hint = W.QLabel('Add individual exposures and stack them, or open a stack you already have.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
         self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
         self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
         self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
@@ -156,6 +162,14 @@ class Window(W.QMainWindow):
         self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
+        self.next_adjust = W.QPushButton('Continue to step 2: Adjust and crop →')
+        self.next_adjust.setEnabled(False)
+        self.next_adjust.clicked.connect(lambda: self.show_step(self.step_adjust))
+        sidebar.addWidget(self.next_adjust)
+        self.step_adjust = W.QGroupBox('2. Adjust and crop')
+        self.step_adjust.setEnabled(False); outer_sidebar.addWidget(self.step_adjust)
+        sidebar = W.QVBoxLayout(self.step_adjust)
+        adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
         self.slider_defaults = {}
         for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100)]:
@@ -194,7 +208,13 @@ class Window(W.QMainWindow):
         self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
         crop_layout.addRow(self.apply_crop); crop_layout.addRow(self.restore_crop)
         self.crop_group.setEnabled(False); sidebar.addWidget(self.crop_group)
-        self.export = W.QPushButton('Export FITS / 16-bit TIFF / PNG…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
+        next_export = W.QPushButton('Continue to step 3: Export →')
+        next_export.clicked.connect(lambda: self.show_step(self.step_export)); sidebar.addWidget(next_export)
+        self.step_export = W.QGroupBox('3. Export')
+        self.step_export.setEnabled(False); outer_sidebar.addWidget(self.step_export)
+        sidebar = W.QVBoxLayout(self.step_export)
+        export_hint = W.QLabel('Save the adjusted picture as TIFF or PNG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
+        self.export = W.QPushButton('3. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
         self.preview = CropPreview('Your image will appear here'); self.preview.setAlignment(QtCore.Qt.AlignCenter); self.preview.setMinimumSize(400, 300); self.preview.setStyleSheet('background:#080e18;color:#a6b7cc'); right.addWidget(self.preview, 4)
         self.preview.selection.connect(self.select_crop)
@@ -203,6 +223,9 @@ class Window(W.QMainWindow):
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+    def show_step(self, widget):
+        position = widget.mapTo(self.sidebar_scroll.widget(), QtCore.QPoint(0, 0)).y()
+        self.sidebar_scroll.verticalScrollBar().setValue(position)
     def add_files(self):
         paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
         existing = {self.files.item(i).text() for i in range(self.files.count())}
@@ -254,6 +277,9 @@ class Window(W.QMainWindow):
         self.reset_crop_controls()
         self.background = engine.background_model(linear)
         self.export.setEnabled(True)
+        self.step_adjust.setEnabled(True); self.step_export.setEnabled(True)
+        self.next_adjust.setEnabled(True)
+        QtCore.QTimer.singleShot(0, lambda: self.show_step(self.step_adjust))
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))

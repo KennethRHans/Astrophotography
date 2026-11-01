@@ -1,4 +1,4 @@
-# Seestar Studio — preview 0.5
+# Seestar Studio — preview 0.6
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
@@ -12,6 +12,14 @@ This setting starts off and is experimental. Star matching, registration,
 stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Guided workflow (0.6)
+The controls are grouped under numbered headings matching the introduction:
+1. Load or stack: add exposures and align/stack, or open an existing stack.
+2. Adjust and crop: sliders and crop tools update the preview automatically.
+3. Export: save TIFF/PNG with adjustments, or linear FITS data.
+Step 2 and Step 3 enable when an image is ready. The view moves to Step 2 then;
+Continue buttons scroll to the next section. The export button is numbered too.
 
 ## Easier adjustments and export names (0.5)
 Slider handles are larger, with more space to click and a hover highlight.
@@ -164,4 +172,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-
