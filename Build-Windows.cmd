@@ -4,7 +4,7 @@ py -3.12 -m venv .venv
 if errorlevel 1 goto fail
 .venv\Scripts\python -m pip install -r requirements.txt "pyinstaller>=6.16,<7"
 if errorlevel 1 goto fail
-.venv\Scripts\python -m PyInstaller --noconfirm --clean --windowed --name SeestarStudio --collect-all astroalign --collect-all astropy app.py
+.venv\Scripts\python -m PyInstaller --noconfirm --clean --windowed --name SeestarStudio --hidden-import sep --collect-submodules skimage.transform app.py
 if errorlevel 1 goto fail
 echo Ready: dist\SeestarStudio\SeestarStudio.exe
 pause

@@ -12,11 +12,12 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest 'pyinstaller>=6.16,<7'
       - run: python -m pytest -q
-      - run: python -m PyInstaller --noconfirm --windowed --name SeestarStudio --collect-all astroalign --collect-all astropy app.py
+      - run: python -m PyInstaller --noconfirm --windowed --name SeestarStudio --hidden-import sep --collect-submodules skimage.transform app.py
       - name: Test packaged application
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath dist/SeestarStudio/SeestarStudio.exe -ArgumentList '--smoke-test' -Wait -PassThru
+          $process = Start-Process -FilePath dist/SeestarStudio/SeestarStudio.exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(120000)) { $process.Kill(); throw "Packaged GUI timed out" }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke test failed: $($process.ExitCode)" }
       - name: Build installer
         shell: pwsh
