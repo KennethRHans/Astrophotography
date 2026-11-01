@@ -3,16 +3,23 @@
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. The RTX 5070 is not used yet.
 
-## Download status
-This is a source preview, not a tested Windows installer. Build on Windows with
-Python 3.12 x64 installed (python.org installer, include Python Launcher).
-Double-click Build-Windows.cmd. Internet is needed to install build dependencies.
-Then open dist\SeestarStudio\SeestarStudio.exe. The entire SeestarStudio folder
-can be copied to another computer; Python is not required there.
-For an installer, install Inno Setup 6 and compile installer.iss after building.
-The included GitHub Actions workflow performs tests and produces both artifacts
-when the project is uploaded to a GitHub repository. No repository is published
-and no Windows build has been run by providing these files.
+## Download and install
+[Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41343270976/artifacts/13097859357)
+(about 261 MiB; GitHub sign-in may be required). Extract the ZIP, then open
+installer/SeestarStudio-0.2.0-Setup.exe. Python is not required to use the app.
+The download also includes a portable dist/SeestarStudio folder; keep that folder
+intact if using SeestarStudio.exe directly.
+
+All seven processing tests and the packaged GUI launch check passed on GitHub's
+Windows Server runner. The installer compiled successfully. Installation and
+interactive use on physical Windows 11 hardware remain untested. This is an
+unsigned preview. No user images are included in this repository or the download.
+The Actions artifact expires January 30, 2027; the source remains on this branch.
+
+To build from source on Windows, install Python 3.12 x64 (including Python
+Launcher), then double-click Build-Windows.cmd. Internet is needed to install
+build dependencies. For an installer, install Inno Setup 6 and compile
+installer.iss after building. GitHub Actions automates both builds.
 
 ## Use
 Copy original FITS files from your Seestar to a local folder. Keep a backup.
