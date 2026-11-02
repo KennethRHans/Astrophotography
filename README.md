@@ -21,7 +21,10 @@ when using the installer. Previously named Astro Studio for Seestar.
 
 ## Windows download
 
-The 0.12 Windows installer is being validated. The previous version is available
+[Download Easy Astro Studio 0.12](https://github.com/KennethRHans/Astrophotography/actions/runs/41383581168/artifacts/13114313119).
+Close the app, extract the ZIP and run
+`installer/EasyAstroStudio-0.12.0-Setup.exe`. Python is not required.
+The previous 0.11 version is available
 [here](https://github.com/KennethRHans/Astrophotography/actions/runs/41379578047/artifacts/13112444289).
 
 New installations default to `C:\Program Files\Easy Astro Studio`. Upgrades keep
@@ -127,7 +130,13 @@ GPU failure fallback and project/history/GUI behavior. Ten real S50 Pro exposure
 passed full-resolution alignment and all 120 GPU combining chunks matched the
 CPU result within floating-point tolerance (maximum absolute difference 0.0078125
 in the source data scale). No source images are included in the download/repo.
-Windows installer validation is pending below.
+Windows tests passed (OpenCL comparisons skipped on the runner without a device).
+Packaged app launch, JPEG export, project roundtrip, Program Files installation,
+desktop shortcut and installed launch checks passed. An actual upgrade from 0.11
+also passed: the Windows app entry and shortcuts use Easy Astro Studio, the old
+executable was removed, a user-created file was preserved and the upgraded app
+launched. This preview remains unsigned; RTX 5070 combining performance still
+needs testing on physical hardware.
 
 ## Development
 
