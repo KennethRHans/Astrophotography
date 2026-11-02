@@ -87,3 +87,98 @@ class GpuProcessor:
         result = np.empty_like(source)
         cl.enqueue_copy(self.queue,result,spare).wait()
         return result
+
+    def combine_input_limit(self):
+        device = self.context.devices[0]
+        return int(min(device.max_mem_alloc_size//2, device.global_mem_size//8))
+
+    def combine(self, block):
+        """Three iterations of median-centered 3-sigma clipping across frames.
+
+        One work item per scalar RGB sample. GPU scratch is a single chunk;
+        the host input is preserved so CPU fallback can safely retry it.
+        """
+        cl = self.cl
+        if not hasattr(self, 'combine_kernel'):
+            use_double = 'cl_khr_fp64' in self.context.devices[0].extensions.split()
+            if not use_double:
+                raise RuntimeError('GPU combining requires double-precision OpenCL for reliable clipping; image adjustments can still use this GPU.')
+            prefix = '#pragma OPENCL EXTENSION cl_khr_fp64 : enable\ntypedef double acc_t;\n'
+            program = cl.Program(self.context, prefix+COMBINE_SOURCE).build()
+            self.combine_kernel = cl.Kernel(program, 'combine_frames')
+        source = np.ascontiguousarray(block, dtype=np.float32)
+        count, pixels = source.shape
+        if source.nbytes > self.combine_input_limit():
+            raise MemoryError('GPU stack chunk exceeds the device allocation budget.')
+        a = cl.Buffer(self.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=source)
+        result = np.empty(pixels, dtype=np.float32)
+        b = cl.Buffer(self.context, cl.mem_flags.WRITE_ONLY, result.nbytes)
+        try:
+            self.combine_kernel(self.queue, (pixels,), None, a, b, np.int32(count), np.int32(pixels))
+            cl.enqueue_copy(self.queue, result, b).wait()
+        finally:
+            self.queue.finish()
+            a.release(); b.release()
+        return result
+
+
+COMBINE_SOURCE = r'''
+// In-place quickselect in the frame dimension. Each pixel owns independent
+// addresses; adjacent work items access adjacent scalar samples.
+float select_k(__global float *v, int stride, int pixel, int n, int k) {
+    int lo=0, hi=n-1;
+    while (lo < hi) {
+        float pivot=v[((lo+hi)/2)*stride+pixel];
+        int i=lo, j=hi;
+        while (i<=j) {
+            while (i<=hi && v[i*stride+pixel]<pivot) ++i;
+            while (j>=lo && v[j*stride+pixel]>pivot) --j;
+            if (i<=j) {
+                float t=v[i*stride+pixel];
+                v[i*stride+pixel]=v[j*stride+pixel];
+                v[j*stride+pixel]=t;
+                ++i; --j;
+            }
+        }
+        if (k<=j) hi=j;
+        else if (k>=i) lo=i;
+        else break;
+    }
+    return v[k*stride+pixel];
+}
+__kernel void combine_frames(__global float *v, __global float *out,
+                              const int frames, const int pixels) {
+    int p=get_global_id(0);
+    if (p>=pixels) return;
+    int n=0;
+    for (int f=0; f<frames; ++f) {
+        float value=v[f*pixels+p];
+        if (isfinite(value)) v[(n++)*pixels+p]=value;
+    }
+    for (int iteration=0; iteration<3 && n>0; ++iteration) {
+        acc_t median=(acc_t)select_k(v,pixels,p,n,n/2);
+        if (n%2==0) {
+            // Avoid summation overflow for large finite input values.
+            median=median*(acc_t)0.5+(acc_t)select_k(v,pixels,p,n,n/2-1)*(acc_t)0.5;
+        }
+        acc_t mean=0, m2=0;
+        for (int f=0; f<n; ++f) {
+            acc_t value=v[f*pixels+p], delta=value-mean;
+            mean+=delta/(f+1);
+            m2+=delta*(value-mean);
+        }
+        acc_t deviation=sqrt(fmax(m2/n,(acc_t)0));
+        acc_t low=(acc_t)median-3*deviation, high=(acc_t)median+3*deviation;
+        int kept=0;
+        for (int f=0; f<n; ++f) {
+            float value=v[f*pixels+p];
+            if (value>=low && value<=high) v[(kept++)*pixels+p]=value;
+        }
+        if (kept==n) break;
+        n=kept;
+    }
+    acc_t total=0;
+    for (int f=0; f<n; ++f) total+=(acc_t)v[f*pixels+p];
+    out[p]=n ? (float)(total/n) : 0.0f;
+}
+'''

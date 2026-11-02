@@ -19,12 +19,21 @@ class Worker(QtCore.QThread):
     result = QtCore.Signal(object, object)
     progress = QtCore.Signal(int, int, str)
     failed = QtCore.Signal(str)
-    def __init__(self, paths, bayer, single=False):
+    def __init__(self, paths, bayer, single=False, use_gpu=False):
         super().__init__()
         self.paths, self.bayer, self.single = paths, bayer, single
+        self.use_gpu = use_gpu
     def run(self):
         try:
-            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested, self.progress.emit)
+            gpu = None
+            if self.use_gpu and not self.single:
+                try:
+                    from gpu import GpuProcessor
+                    gpu = GpuProcessor()
+                    self.message.emit('GPU row combining enabled: '+gpu.name)
+                except Exception as exc:
+                    self.message.emit('GPU combining unavailable; using bounded CPU chunks: '+str(exc))
+            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested, self.progress.emit, gpu=gpu)
             self.result.emit(*result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -50,7 +59,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.source_paths=[]
-        self.setWindowTitle('Astro Studio for Seestar • Preview 0.11')
+        self.setWindowTitle('Easy Astro Studio • Preview 0.12')
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
         app = W.QApplication.instance()
@@ -123,23 +132,22 @@ class Window(W.QMainWindow):
         header = W.QWidget(); header_row = W.QHBoxLayout(header); header_row.setContentsMargins(0,0,0,0)
         self.header_art = W.QLabel(); self.header_art.setFixedSize(104,104)
         self.header_art.setAlignment(QtCore.Qt.AlignCenter)
-        self.artwork_path = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'seestar-cartoon.png'
+        self.artwork_path = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'easy-astro-logo.png'
         artwork=QtGui.QPixmap(str(self.artwork_path))
-        # Supplied replacement PNG already has the requested horizontal orientation.
+        # Display the theme-colored supplied telescope logo upright.
         if not artwork.isNull():
             self.header_art.setPixmap(artwork.scaled(104,104,QtCore.Qt.KeepAspectRatio,QtCore.Qt.SmoothTransformation))
         else:
             self.header_art.setText('Artwork pending')
         header_row.addWidget(self.header_art)
         brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
-        title = W.QLabel('Astro Studio for Seestar'); title.setWordWrap(True); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
-        disclaimer = W.QLabel('Not affiliated with Suzhou ZWO Co., Ltd.'); disclaimer.setWordWrap(True); disclaimer.setContentsMargins(0,0,0,0); brand.addWidget(disclaimer)
+        title = W.QLabel('Easy Astro Studio'); title.setWordWrap(True); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
         left_column.addWidget(header)
         self.gpu_panel = W.QFrame(); self.gpu_panel.setObjectName('gpuPanel')
         gpu_row = W.QHBoxLayout(self.gpu_panel); gpu_row.setContentsMargins(12,10,12,10)
-        self.use_gpu = VisibleGpuCheckBox('Click to use GPU for faster image adjustments')
+        self.use_gpu = VisibleGpuCheckBox('Click to use GPU for faster combining and image adjustments')
         self.use_gpu.setObjectName('gpuSwitch')
-        self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
+        self.use_gpu.setToolTip('Accelerates row combining, stretch, saturation and smoothing. Star alignment stays on CPU. Uses bounded chunks with CPU fallback.')
         self.use_gpu.toggled.connect(self.toggle_gpu); gpu_row.addWidget(self.use_gpu); left_column.addWidget(self.gpu_panel)
         controls = W.QWidget(); controls.setObjectName('controlPanel')
         sidebar = W.QVBoxLayout(controls)
@@ -159,7 +167,12 @@ class Window(W.QMainWindow):
         self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
         sidebar.addWidget(W.QLabel('Bayer pattern (for 2D files only)'))
         self.bayer = W.QComboBox(); self.bayer.addItems(['Auto', 'RGGB', 'BGGR', 'GRBG', 'GBRG', 'None']); sidebar.addWidget(self.bayer)
-        note = W.QLabel('Auto uses BAYERPAT. Missing header → grayscale.\nUse None for an already debayered 2D image.\nDo not mix targets, sizes, or exposure settings.'); note.setWordWrap(True); sidebar.addWidget(note)
+        self.bayer_help = W.QLabel(); self.bayer_help.setWordWrap(True)
+        self.bayer_help.setStyleSheet('color:#d5e8ff; padding:6px; border:1px solid #365f94;')
+        sidebar.addWidget(self.bayer_help)
+        self.bayer.currentTextChanged.connect(self.update_bayer_help)
+        self.update_bayer_help()
+        note = W.QLabel('The camera sensor and capture software determine the pattern, not the telescope optics. Auto reads BAYERPAT; a missing header produces grayscale. RGB stacks ignore this setting. Do not mix targets, sizes, or exposure settings.'); note.setWordWrap(True); sidebar.addWidget(note)
         self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
@@ -270,6 +283,10 @@ class Window(W.QMainWindow):
         existing = {self.files.item(i).text() for i in range(self.files.count())}
         self.files.addItems([p for p in paths if p not in existing])
         self.update_actions()
+    def update_bayer_help(self):
+        from bayer_guide import BAYER_GUIDE
+        self.bayer_help.setText(BAYER_GUIDE[self.bayer.currentText()])
+
     def remove_files(self):
         for item in self.files.selectedItems(): self.files.takeItem(self.files.row(item))
         self.update_actions()
@@ -287,11 +304,11 @@ class Window(W.QMainWindow):
         self.pending_source_paths=list(paths)
         self.pending_source_name = Path(paths[0]).stem
         self.log.appendPlainText('Starting. Alignment uses the first listed exposure as reference.\nTemporary disk space needed: approximately 12 bytes × pixels × frames.')
-        for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(False)
+        for control in (self.run, self.open, self.add, self.remove, self.bayer, self.use_gpu): control.setEnabled(False)
         self.cancel.setEnabled(True)
         self.progress_bar.setRange(0, 0)
         self.progress_text.setText('Loading FITS image…' if single else 'Preparing exposures…')
-        self.worker = Worker(paths, self.bayer.currentText(), single)
+        self.worker = Worker(paths, self.bayer.currentText(), single, self.use_gpu.isChecked())
         self.worker.message.connect(self.log.appendPlainText)
         self.worker.progress.connect(self.update_progress)
         self.worker.result.connect(self.loaded)
@@ -312,7 +329,7 @@ class Window(W.QMainWindow):
         self.progress_text.setText('Stopped: '+text)
         self.log.appendPlainText('Stopped: '+text)
     def finished(self):
-        for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(True)
+        for control in (self.run, self.open, self.add, self.remove, self.bayer, self.use_gpu): control.setEnabled(True)
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
         self.update_actions()
@@ -344,8 +361,8 @@ class Window(W.QMainWindow):
             try:
                 from gpu import GpuProcessor
                 self.gpu = GpuProcessor()
-                self.log.appendPlainText('GPU adjustments enabled: '+self.gpu.name)
-                self.statusBar().showMessage('GPU adjustments: '+self.gpu.name+' • Alignment/stacking: CPU')
+                self.log.appendPlainText('GPU enabled for row combining and adjustments: '+self.gpu.name)
+                self.statusBar().showMessage('GPU combining/adjustments: '+self.gpu.name+' • Alignment: CPU')
             except Exception as exc:
                 self.use_gpu.blockSignals(True); self.use_gpu.setChecked(False); self.use_gpu.blockSignals(False)
                 self.log.appendPlainText('Using CPU: '+str(exc))
@@ -553,7 +570,7 @@ class Window(W.QMainWindow):
         path=None if save_as else self.project_path
         if not path:
             initial=str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DocumentsLocation))/(engine.export_basename(self.header,self.source_name)+'.astro'))
-            path,_=W.QFileDialog.getSaveFileName(self,'Save project',initial,'Astro Studio project (*.astro)')
+            path,_=W.QFileDialog.getSaveFileName(self,'Save project',initial,'Easy Astro Studio project (*.astro)')
             if not path:return
             if Path(path).suffix.lower()!='.astro':path+='.astro'
         self.save_project_path(path,after_save)
@@ -562,7 +579,7 @@ class Window(W.QMainWindow):
         payload=(self.original_linear,self.original_header.copy(),self.project_manifest())
         self._start_project_io(path,payload)
     def open_project_dialog(self):
-        path,_=W.QFileDialog.getOpenFileName(self,'Open saved project','','Astro Studio project (*.astro)')
+        path,_=W.QFileDialog.getOpenFileName(self,'Open saved project','','Easy Astro Studio project (*.astro)')
         if path and self.allow_replace():self.open_project_path(path)
     def open_project_path(self,path):self._after_io=None;self._start_project_io(path,None)
     def _start_project_io(self,path,payload):
@@ -636,10 +653,10 @@ class Window(W.QMainWindow):
 if __name__ == '__main__':
     if sys.platform == 'win32':
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('AstroStudioForSeestar.Desktop')
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('EasyAstroStudio.Desktop')
     app = W.QApplication(sys.argv)
-    app.setApplicationName('Astro Studio for Seestar')
-    app.setApplicationDisplayName('Astro Studio for Seestar')
+    app.setApplicationName('Easy Astro Studio')
+    app.setApplicationDisplayName('Easy Astro Studio')
     app.setStyle('Fusion')
     window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()
     if '--smoke-test' in sys.argv:

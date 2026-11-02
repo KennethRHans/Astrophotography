@@ -50,3 +50,33 @@ def test_undo_crop_reset_and_project_reopen(tmp_path,monkeypatch):
     assert not window.isVisible()
     from project_store import load_project
     assert load_project(path)[2]['state']==window.edit_state()
+
+
+def test_new_brand_bayer_guidance_and_gpu_worker(monkeypatch):
+    from PySide6.QtWidgets import QLabel
+    from app import Worker
+    import engine,gpu
+    app=QApplication.instance() or QApplication([])
+    window=Window(ask_on_close=False)
+    assert window.windowTitle().startswith('Easy Astro Studio')
+    assert not any('Not affiliated' in label.text() for label in window.findChildren(QLabel))
+    assert window.artwork_path.name=='easy-astro-logo.png'
+    for pattern in ('RGGB','BGGR','GRBG','GBRG','None','Auto'):
+        window.bayer.setCurrentText(pattern)
+        assert window.bayer_help.text()
+    window.bayer.setCurrentText('GRBG');assert 'Seestar S50 Pro' in window.bayer_help.text()
+    window.close()
+    class Device:
+        name='Test device'
+    monkeypatch.setattr(gpu,'GpuProcessor',Device)
+    calls=[]
+    def stack(*args,**kwargs):
+        calls.append(kwargs['gpu']);return np.ones((2,2,3),dtype='float32'),fits.Header()
+    monkeypatch.setattr(engine,'stack',stack)
+    worker=Worker(['a.fit','b.fit'],'Auto',use_gpu=True)
+    messages=[];worker.message.connect(messages.append);worker.run()
+    assert isinstance(calls[-1],Device)
+    def fail():raise RuntimeError('No GPU')
+    monkeypatch.setattr(gpu,'GpuProcessor',fail)
+    worker.run()
+    assert calls[-1] is None and any('bounded CPU chunks' in line for line in messages)

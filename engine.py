@@ -1,15 +1,13 @@
 """Linear FITS processing. Never modifies input files."""
 from pathlib import Path
-import tempfile
-import warnings
 import numpy as np
 import cv2
 import astroalign
 from astropy.io import fits
-from astropy.stats import sigma_clip
 from scipy.ndimage import gaussian_filter
 import tifffile
 from PIL import Image
+from stack_store import AlignedFrames, combine
 
 
 def read_fits(path, bayer='Auto'):
@@ -60,7 +58,7 @@ def image_summary(data, header):
 
 
 def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
-          report_progress=lambda completed, total, stage: None):
+          report_progress=lambda completed, total, stage: None, gpu=None):
     if len(paths) < 2:
         raise ValueError('Select at least two individual exposures, or open one finished stack.')
     for path in paths:
@@ -68,52 +66,38 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
             raise ValueError(f'{Path(path).name} is already stacked. Use Open existing FITS stack.')
     reference, header = read_fits(paths[0], bayer)
     h, w, _ = reference.shape
-    # Disk-backed aligned frames keep hundreds of exposures out of RAM.
-    with tempfile.TemporaryDirectory(prefix='SeestarStudio-') as folder:
-        frames = np.memmap(Path(folder)/'aligned.dat', mode='w+', dtype='float32', shape=(len(paths), h, w, 3))
-        try:
-            frames[0] = reference
-            accepted = 1
-            report_progress(1, len(paths), "Aligning exposures")
-            total_exposure = float(header.get("EXPTIME", header.get("EXPOSURE", 0)))
-            for i, path in enumerate(paths[1:], 1):
-                if cancelled():
-                    raise InterruptedError('Cancelled')
-                progress(f'Aligning {i+1}/{len(paths)}: {Path(path).name}')
-                moving, moving_header = read_fits(path, bayer)
-                if moving.shape != reference.shape:
-                    raise ValueError(f'Image dimensions differ: {Path(path).name}')
-                try:
-                    transform, _ = astroalign.find_transform(moving.mean(axis=-1), reference.mean(axis=-1))
-                    aligned, footprint = astroalign.apply_transform(transform, moving, reference)
-                    aligned[footprint] = np.nan
-                    frames[accepted] = aligned
-                    accepted += 1
-                    total_exposure += float(moving_header.get("EXPTIME", moving_header.get("EXPOSURE", 0)))
-                except (astroalign.MaxIterError, ValueError, RuntimeError) as exc:
-                    progress(f'Skipped {Path(path).name}: {exc}')
-                report_progress(i+1, len(paths), 'Aligning exposures')
-            if accepted < 2:
-                raise ValueError('Could not align a second exposure. Try a sharper reference frame first.')
-            output = np.empty_like(reference)
-            report_progress(0, h, "Combining image rows")
-            for y in range(0, h, 32):
-                if cancelled():
-                    raise InterruptedError('Cancelled')
-                progress(f'Combining rows {y+1}–{min(y+32,h)}; {accepted} aligned frames')
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore', RuntimeWarning)
-                    block = sigma_clip(frames[:accepted, y:y+32], sigma=3, maxiters=3, axis=0)
-                    output[y:y+32] = np.ma.mean(block, axis=0).filled(np.nan)
-                report_progress(min(y+32, h), h, "Combining image rows")
-        finally:
-            frames._mmap.close()
-        del frames
-    # Pixels without coverage are black, not extrapolated detail.
-    output = np.nan_to_num(output)
+    # Explicit disk I/O and bounded staging buffers keep the entire stack out
+    # of process RAM even after every aligned frame has been accessed.
+    with AlignedFrames(reference.shape) as frames:
+        frames.append(reference)
+        report_progress(1, len(paths), 'Aligning exposures')
+        total_exposure = float(header.get('EXPTIME', header.get('EXPOSURE', 0)))
+        for i, path in enumerate(paths[1:], 1):
+            if cancelled():
+                raise InterruptedError('Cancelled')
+            progress(f'Aligning {i+1}/{len(paths)}: {Path(path).name}')
+            moving, moving_header = read_fits(path, bayer)
+            if moving.shape != reference.shape:
+                raise ValueError(f'Image dimensions differ: {Path(path).name}')
+            try:
+                transform, _ = astroalign.find_transform(moving.mean(axis=-1), reference.mean(axis=-1))
+                aligned, footprint = astroalign.apply_transform(transform, moving, reference)
+                aligned[footprint] = np.nan
+                frames.append(aligned)
+                total_exposure += float(moving_header.get('EXPTIME', moving_header.get('EXPOSURE', 0)))
+                del aligned, footprint
+            except (astroalign.MaxIterError, ValueError, RuntimeError) as exc:
+                progress(f'Skipped {Path(path).name}: {exc}')
+            del moving
+            report_progress(i+1, len(paths), 'Aligning exposures')
+        accepted = frames.count
+        if accepted < 2:
+            raise ValueError('Could not align a second exposure. Try a sharper reference frame first.')
+        del reference
+        output = combine(frames, gpu, progress, cancelled, report_progress)
     header['NCOMBINE'] = accepted
     header['TOTALEXP'] = (total_exposure, 'Total accepted exposure time in seconds')
-    header.add_history('Seestar Studio: star similarity alignment; 3-sigma clipped mean.')
+    header.add_history('Easy Astro Studio: star similarity alignment; 3-sigma clipped mean.')
     return output, header
 
 

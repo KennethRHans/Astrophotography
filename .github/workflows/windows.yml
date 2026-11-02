@@ -15,11 +15,11 @@ jobs:
       - run: python -m pytest -q
       - name: Remove test runner before freezing runtime
         run: python -m pip uninstall -y pytest
-      - run: python -m PyInstaller --noconfirm --windowed --name AstroStudioForSeestar --version-file version_info.txt --add-data "assets;assets" --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
+      - run: python -m PyInstaller --noconfirm --windowed --name EasyAstroStudio --version-file version_info.txt --add-data "assets;assets" --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
       - name: Test packaged application
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath dist/AstroStudioForSeestar/AstroStudioForSeestar.exe -ArgumentList '--smoke-test' -PassThru
+          $process = Start-Process -FilePath dist/EasyAstroStudio/EasyAstroStudio.exe -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); throw "Packaged GUI timed out" }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke test failed: $($process.ExitCode)" }
       - name: Build installer
@@ -28,50 +28,50 @@ jobs:
       - name: Verify Program Files install and desktop shortcut
         shell: pwsh
         run: |
-          $setup = Start-Process -FilePath installer/AstroStudioForSeestar-0.11.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $setup = Start-Process -FilePath installer/EasyAstroStudio-0.12.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
-          $installed = Join-Path $env:ProgramFiles 'Astro Studio for Seestar/AstroStudioForSeestar.exe'
+          $installed = Join-Path $env:ProgramFiles 'Easy Astro Studio/EasyAstroStudio.exe'
           if (-not (Test-Path $installed)) { throw 'Application missing from native Program Files' }
           $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
-          if (-not (Test-Path (Join-Path $desktop 'Astro Studio for Seestar.lnk'))) { throw 'Desktop shortcut missing' }
+          if (-not (Test-Path (Join-Path $desktop 'Easy Astro Studio.lnk'))) { throw 'Desktop shortcut missing' }
           $process = Start-Process -FilePath $installed -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Installed GUI timed out' }
           if ($process.ExitCode -ne 0) { throw "Installed GUI failed: $($process.ExitCode)" }
       - name: Fetch previous preview to verify rename upgrade
         uses: actions/download-artifact@v4
         with:
-          name: SeestarStudio-Windows
+          name: AstroStudioForSeestar-Windows
           path: previous-preview
-          run-id: 41362474358
+          run-id: 41379578047
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify upgrade from Seestar Studio 0.8
+      - name: Verify upgrade from Astro Studio for Seestar 0.11
         shell: pwsh
         run: |
-          $newFolder = Join-Path $env:ProgramFiles 'Astro Studio for Seestar'
+          $newFolder = Join-Path $env:ProgramFiles 'Easy Astro Studio'
           $uninstall = Start-Process -FilePath (Join-Path $newFolder 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw 'Fresh-install cleanup failed' }
-          $old = Start-Process -FilePath previous-preview/installer/SeestarStudio-0.8.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $old = Start-Process -FilePath previous-preview/installer/AstroStudioForSeestar-0.11.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($old.ExitCode -ne 0) { throw 'Previous preview fixture installation failed' }
-          $oldFolder = Join-Path $env:ProgramFiles 'Seestar Studio'
+          $oldFolder = Join-Path $env:ProgramFiles 'Astro Studio for Seestar'
           $sentinel = Join-Path $oldFolder 'user-image-preservation.txt'
           Set-Content -LiteralPath $sentinel -Value 'Preserve user-created files during rename upgrade'
-          $upgrade = Start-Process -FilePath installer/AstroStudioForSeestar-0.11.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $upgrade = Start-Process -FilePath installer/EasyAstroStudio-0.12.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw 'Rename upgrade failed' }
-          $exe = Join-Path $oldFolder 'AstroStudioForSeestar.exe'
+          $exe = Join-Path $oldFolder 'EasyAstroStudio.exe'
           if (-not (Test-Path $exe)) { throw 'Renamed app missing from previous install directory' }
-          if (Test-Path (Join-Path $oldFolder 'SeestarStudio.exe')) { throw 'Old executable remains' }
+          if (Test-Path (Join-Path $oldFolder 'AstroStudioForSeestar.exe')) { throw 'Old executable remains' }
           if (-not (Test-Path $sentinel)) { throw 'User-created file was removed' }
           $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
-          if (Test-Path (Join-Path $desktop 'Seestar Studio.lnk')) { throw 'Old shortcut remains' }
-          if (-not (Test-Path (Join-Path $desktop 'Astro Studio for Seestar.lnk'))) { throw 'Renamed shortcut missing' }
+          if (Test-Path (Join-Path $desktop 'Astro Studio for Seestar.lnk')) { throw 'Old shortcut remains' }
+          if (-not (Test-Path (Join-Path $desktop 'Easy Astro Studio.lnk'))) { throw 'Renamed shortcut missing' }
           $entry = Get-ItemProperty 'HKLM:/Software/Microsoft/Windows/CurrentVersion/Uninstall/Seestar Studio Preview_is1'
-          if ($entry.DisplayName -notlike 'Astro Studio for Seestar*') { throw 'Windows app entry has old name' }
+          if ($entry.DisplayName -notlike 'Easy Astro Studio*') { throw 'Windows app entry has old name' }
           $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Upgraded app timed out' }
           if ($process.ExitCode -ne 0) { throw 'Upgraded app failed to start' }
       - uses: actions/upload-artifact@v4
         with:
-          name: AstroStudioForSeestar-Windows
+          name: EasyAstroStudio-Windows
           path: |
             installer/*.exe
-            dist/AstroStudioForSeestar/
+            dist/EasyAstroStudio/

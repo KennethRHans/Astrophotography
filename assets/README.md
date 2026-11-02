@@ -1,4 +1,5 @@
-Header artwork supplied by the project owner in ChatGPT Image Nov 1, 2026, 07_36_12 PM.zip.
-Bundled as seestar-cartoon.png with original PNG bytes unchanged.
-The supplied image already has the requested horizontal orientation, child on the left.
-It is scaled only for display, without another flip.
+easy-astro-logo.png: theme-colored adaptation of the telescope-and-observer
+logo supplied by the project owner in ChatGPT Image Nov 1, 2026, 07_47_56 PM.zip.
+Recolored blue, ice blue and white for the black/navy interface; transparent
+background, supplied orientation retained. Generated from the supplied reference.
+seestar-cartoon.png is historical artwork, no longer displayed.
