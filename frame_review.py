@@ -59,7 +59,7 @@ class FrameReviewDialog(W.QDialog):
     def __init__(self,paths,bayer,parent=None,selected=None):
         super().__init__(parent)
         self.setWindowTitle('Preview exposures and choose a reference');self.resize(1180,780)
-        self.paths=list(paths);self.bayer=bayer;self.records={};self.worker=None;self.chosen_path=None;self._closing=False
+        self.paths=list(paths);self.bayer=bayer;self.records={};self.worker=None;self.chosen_path=None;self._closing=False;self._selection_path=None
         root=W.QVBoxLayout(self)
         hint=W.QLabel('The reference is the frame other exposures align to. Preview stars, or analyze the batch for relative scores. Use as reference moves your choice to the top; all exposures remain in the list.')
         hint.setWordWrap(True);root.addWidget(hint)
@@ -71,7 +71,9 @@ class FrameReviewDialog(W.QDialog):
         self.table.setTextElideMode(QtCore.Qt.ElideMiddle);self.table.setWordWrap(False)
         for row,path in enumerate(paths):
             item=W.QTableWidgetItem(Path(path).name);item.setData(QtCore.Qt.UserRole,path);item.setToolTip(path);self.table.setItem(row,0,item)
-            for column in range(1,6):self.table.setItem(row,column,ScoreItem('—') if column==1 else W.QTableWidgetItem('Not analyzed' if column==5 else '—'))
+            for column in range(1,6):self.table.setItem(row,column,ScoreItem('—') if column in (1,2,3,4) else W.QTableWidgetItem('Not analyzed' if column==5 else '—'))
+        self.table.setSortingEnabled(True);self.table.sortItems(0,QtCore.Qt.AscendingOrder)
+        self.table.horizontalHeader().setToolTip('Click a column heading to sort; click again to reverse the order.')
         split.addWidget(self.table)
         right=W.QWidget();column=W.QVBoxLayout(right);column.setContentsMargins(4,0,0,0)
         self.view=ReviewPreview();column.addWidget(self.view,1)
@@ -95,7 +97,8 @@ class FrameReviewDialog(W.QDialog):
         close=W.QPushButton('Close');close.clicked.connect(self.reject);buttons.addWidget(close)
         self.table.cellDoubleClicked.connect(lambda *_:self.start_preview())
         self.table.itemSelectionChanged.connect(self.selection_changed)
-        self.table.selectRow(self.paths.index(selected) if selected in self.paths else 0)
+        initial=selected if selected in self.paths else self.paths[0] if self.paths else None
+        if initial is not None:self.table.selectRow(next(i for i in range(self.table.rowCount()) if self.table.item(i,0).data(QtCore.Qt.UserRole)==initial))
         QtCore.QTimer.singleShot(0,lambda:self.start_preview() if self.isVisible() else None)
 
     def selected_path(self):
@@ -125,8 +128,10 @@ class FrameReviewDialog(W.QDialog):
     def start_analysis(self):
         if self.worker is not None:return
         self.records={}
+        self.table.setSortingEnabled(False)
         for row in range(self.table.rowCount()):
-            for col in range(1,6):self.table.setItem(row,col,ScoreItem('—') if col==1 else W.QTableWidgetItem('Not analyzed' if col==5 else '—'))
+            for col in range(1,6):self.table.setItem(row,col,ScoreItem('—') if col in (1,2,3,4) else W.QTableWidgetItem('Not analyzed' if col==5 else '—'))
+        self.table.setSortingEnabled(True)
         self.status.setText('Analyzing one exposure at a time. Cancel stops between files.')
         self.launch(ReviewWorker(self.paths,self.bayer,scan=True))
 
@@ -135,11 +140,16 @@ class FrameReviewDialog(W.QDialog):
         self.refresh_row(path,record)
 
     def refresh_row(self,path,record):
+        self.table.setSortingEnabled(False)
         row=next(i for i in range(self.table.rowCount()) if self.table.item(i,0).data(QtCore.Qt.UserRole)==path)
         score=record.get('score');item=ScoreItem(f'{score:.1f}' if score is not None else '—');item.setData(QtCore.Qt.UserRole,score);self.table.setItem(row,1,item)
         for column,key in ((2,'stars'),(3,'fwhm'),(4,'elongation'),(5,'status')):
             value=record.get(key)
-            item=W.QTableWidgetItem(f'{value:.2f}' if isinstance(value,float) else str(value) if value is not None else '—');item.setToolTip(item.text());self.table.setItem(row,column,item)
+            text=f'{value:.2f}' if isinstance(value,float) else str(value) if value is not None else '—'
+            item=ScoreItem(text) if column in (2,3,4) else W.QTableWidgetItem(text)
+            if column in (2,3,4):item.setData(QtCore.Qt.UserRole,value)
+            item.setToolTip(item.text());self.table.setItem(row,column,item)
+        self.table.setSortingEnabled(True)
 
     def receive_preview(self,path,payload,caption):
         pixels,size=payload;h,w,_=pixels.shape
@@ -160,7 +170,9 @@ class FrameReviewDialog(W.QDialog):
 
     def selection_changed(self):
         self.refresh_best_button()
-        if self.worker is None:
+        path=self.selected_path()
+        changed=path!=self._selection_path;self._selection_path=path
+        if self.worker is None and changed:
             self.view.item.setPixmap(QtGui.QPixmap());self.view.source_size=None;self.view.viewport().update()
             self.caption.setText('Selected: '+Path(self.selected_path()).name+' • Click Preview selected' if self.selected_path() else '')
 

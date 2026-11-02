@@ -1,8 +1,35 @@
-# Easy Astro Studio — preview 0.14
+# Easy Astro Studio — preview 0.15
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Five-step workflow and sortable review (0.15)
+
+Instructions and the five matching blue sections are now:
+1. Set Bayer Pattern (Equipment-based)
+2. Load FITS Stack or Multiple Files to Stack
+3. Align and Stack Exposures
+4. Adjust and Crop
+5. Export
+
+Step 2 separates Open existing FITS stack and Add exposures with a centered OR.
+Existing stacks skip step 3 and open in step 4. Continue buttons use the new
+numbers. Alignment is available after adding at least two individual exposures.
+Bayer help still recommends Auto and explains that the stored camera/file
+orientation determines the pattern.
+
+Mouse-wheel events no longer change adjustment sliders, even when focused;
+they pass through for panel scrolling. Dragging, clicking and keyboard arrows
+still adjust sliders. Image-wheel zoom remains available.
+
+Every exposure-review column sorts by clicking its heading; click again to
+reverse direction. Score, star count, FWHM and elongation use numeric ordering.
+Updates during/after analysis keep all values with their filename and preserve
+the selected frame. Sorting the review table does not reorder the main exposure
+list; Use as reference remains the explicit operation that changes its first file.
+
+The community footer background is black; its buttons, banner and border remain.
 
 ## Exposure review, About and workflow (0.14)
 
@@ -66,10 +93,12 @@ Plan tonight's observing at https://astrivanta.com/ and opens the default browse
 
 ## Windows download
 
+The 0.15 installer is being validated. Previous version:
+
 [Download Easy Astro Studio 0.14](https://github.com/KennethRHans/Astrophotography/actions/runs/41536718015/artifacts/13184763084).
 Close the app, extract the ZIP and run
 `installer/EasyAstroStudio-0.14.0-Setup.exe`.
-All 37 local tests passed. Windows tests, packaged exposure preview/analysis,
+All 38 local tests passed. Windows tests, packaged exposure preview/analysis,
 project/JPEG checks, Program Files installation, desktop shortcut, installed
 launch and actual upgrade with user-file preservation checks passed. The runner
 has no OpenCL device, so hardware comparisons skip there. This remains an
@@ -190,7 +219,7 @@ The header artwork is decorative and does not affect astronomical processing.
 
 ## Validation
 
-All 37 local tests passed, including software OpenCL comparisons for 2–512
+All 38 local tests passed, including software OpenCL comparisons for 2–512
 frames, boundary-sensitive clipping, missing coverage, disk chunk limits,
 GPU failure fallback, project/history/GUI behavior and reference review/scoring.
 Synthetic sharp/blurred/trailed/noise-only fields verify the rating direction and

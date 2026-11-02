@@ -31,7 +31,7 @@ def test_crop_edges_and_zoom_keep_source_pixels():
     window.close()
 
 
-def test_wheel_sensitive_area_is_ten_percent_narrower():
+def test_mouse_wheel_never_changes_slider():
     app=W.QApplication.instance() or W.QApplication([])
     slider=WheelSlider(QtCore.Qt.Horizontal);slider.resize(200,36);slider.setRange(0,100);slider.setValue(50)
     def wheel(x):
@@ -40,4 +40,6 @@ def test_wheel_sensitive_area_is_ten_percent_narrower():
         return event
     event=wheel(5)
     assert slider.value()==50 and not event.isAccepted()
-    wheel(100);assert slider.value()!=50
+    for x in (10,50,100,150,195):
+        event=wheel(x);assert slider.value()==50 and not event.isAccepted()
+    slider.setFocus();wheel(100);assert slider.value()==50

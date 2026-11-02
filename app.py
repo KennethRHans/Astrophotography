@@ -84,7 +84,7 @@ class Window(W.QMainWindow):
             QScrollArea { border: none; }
             QToolBar { background: #000000; border-bottom: 1px solid #3a6c9e; spacing: 6px; }
             QFrame#histogramPanel { background: #0b2545; border: 1px solid #3a6c9e; border-radius: 5px; }
-            QGroupBox#stepLoad, QGroupBox#stepAdjust, QGroupBox#stepExport {
+            QGroupBox#stepEquipment, QGroupBox#stepLoad, QGroupBox#stepStack, QGroupBox#stepAdjust, QGroupBox#stepExport {
                 border: 2px solid #3a6c9e; border-radius: 8px;
                 margin-top: 4px; padding-top: 4px; background: #0b2545;
             }
@@ -163,13 +163,11 @@ class Window(W.QMainWindow):
         scroll.setMinimumWidth(360); left_column.addWidget(scroll,1)
         self.sidebar_scroll = scroll
         instructions = W.QLabel('Instructions For Use:'); instructions.setStyleSheet('font-weight:bold; font-size:15px'); sidebar.addWidget(instructions)
-        intro = W.QLabel('1. Set Bayer Pattern then Open existing FITS stack or Multiple FIT files and Stack\n2. Adjust and crop\n3. Export'); intro.setWordWrap(True); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
+        intro = W.QLabel('1. Set Bayer Pattern (Equipment-based)\n2. Load FITS Stack or Multiple Files to Stack\n3. Align and Stack Exposures\n4. Adjust and Crop\n5. Export'); intro.setWordWrap(True); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
         outer_sidebar = sidebar
-        self.step_load = W.QGroupBox(); self.step_load.setAccessibleName('1. Load or stack'); self.step_load.setObjectName('stepLoad')
-        outer_sidebar.addWidget(self.step_load)
-        sidebar = W.QVBoxLayout(self.step_load)
-        section_title = W.QLabel('1. Load or stack'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
-        load_hint = W.QLabel('Add a stack you already have, or add individual exposures and stack and align next.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
+        self.step_equipment=W.QGroupBox();self.step_equipment.setObjectName('stepEquipment');self.step_equipment.setAccessibleName('1. Set Bayer Pattern (Equipment-based)')
+        outer_sidebar.addWidget(self.step_equipment);sidebar=W.QVBoxLayout(self.step_equipment)
+        section_title=W.QLabel('1. Set Bayer Pattern (Equipment-based)');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
         sidebar.addWidget(W.QLabel('Select Bayer pattern (for 2d files only)'))
         self.bayer = W.QComboBox(); self.bayer.addItems(['Auto', 'RGGB', 'BGGR', 'GRBG', 'GBRG', 'None']); sidebar.addWidget(self.bayer)
         self.bayer_help = W.QLabel(); self.bayer_help.setWordWrap(True)
@@ -178,23 +176,36 @@ class Window(W.QMainWindow):
         self.bayer.currentTextChanged.connect(self.update_bayer_help)
         self.update_bayer_help()
         note = W.QLabel('The camera sensor and capture software determine the pattern, not the telescope optics. Auto reads BAYERPAT; a missing header produces grayscale. RGB stacks ignore this setting. Do not mix targets, sizes, or exposure settings.'); note.setWordWrap(True); sidebar.addWidget(note)
+        next_load=W.QPushButton('Continue to step 2: Load files →');next_load.clicked.connect(lambda:self.show_step(self.step_load));sidebar.addWidget(next_load)
+        outer_sidebar.addSpacing(20)
+        self.step_load=W.QGroupBox();self.step_load.setObjectName('stepLoad');self.step_load.setAccessibleName('2. Load FITS Stack or Multiple Files to Stack')
+        outer_sidebar.addWidget(self.step_load);sidebar=W.QVBoxLayout(self.step_load)
+        section_title=W.QLabel('2. Load FITS Stack or Multiple Files to Stack');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
+        load_hint=W.QLabel('Open an existing stack and continue to step 4, or add individual exposures for step 3.');load_hint.setWordWrap(True);sidebar.addWidget(load_hint)
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
+        or_label=W.QLabel('OR');or_label.setAlignment(QtCore.Qt.AlignCenter);or_label.setStyleSheet('font-weight:bold; color:#def2ff');sidebar.addWidget(or_label)
         self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
         self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
         self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
         self.review=W.QPushButton('Preview / rate exposures…');self.review.clicked.connect(self.review_exposures);sidebar.addWidget(self.review)
+        self.next_stack=W.QPushButton('Continue to step 3: Align and stack →');self.next_stack.clicked.connect(lambda:self.show_step(self.step_stack));sidebar.addWidget(self.next_stack)
+        outer_sidebar.addSpacing(20)
+        self.step_stack=W.QGroupBox();self.step_stack.setObjectName('stepStack');self.step_stack.setAccessibleName('3. Align and Stack Exposures')
+        outer_sidebar.addWidget(self.step_stack);sidebar=W.QVBoxLayout(self.step_stack)
+        section_title=W.QLabel('3. Align and Stack Exposures');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
+        stack_hint=W.QLabel('For individual exposures only. Existing stacks skip this step and open in step 4.');stack_hint.setWordWrap(True);sidebar.addWidget(stack_hint)
         self.reference_label=W.QLabel('Reference: first exposure in the list');self.reference_label.setWordWrap(True);sidebar.addWidget(self.reference_label)
         self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
-        self.next_adjust = W.QPushButton('Continue to step 2: Adjust and crop →')
+        self.next_adjust = W.QPushButton('Continue to step 4: Adjust and Crop →')
         self.next_adjust.setEnabled(False)
         self.next_adjust.clicked.connect(lambda: self.show_step(self.step_adjust))
         sidebar.addWidget(self.next_adjust)
         outer_sidebar.addSpacing(20)
-        self.step_adjust = W.QGroupBox(); self.step_adjust.setAccessibleName('2. Adjust and crop'); self.step_adjust.setObjectName('stepAdjust')
+        self.step_adjust = W.QGroupBox(); self.step_adjust.setAccessibleName('4. Adjust and Crop'); self.step_adjust.setObjectName('stepAdjust')
         self.step_adjust.setEnabled(False); outer_sidebar.addWidget(self.step_adjust)
         sidebar = W.QVBoxLayout(self.step_adjust)
-        section_title = W.QLabel('2. Adjust and crop'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
+        section_title = W.QLabel('4. Adjust and Crop'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
         self.slider_rows = {}
@@ -228,15 +239,15 @@ class Window(W.QMainWindow):
         self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
         crop_layout.addRow(self.apply_crop); crop_layout.addRow(self.restore_crop)
         self.crop_group.setEnabled(False); sidebar.addWidget(self.crop_group)
-        next_export = W.QPushButton('Continue to step 3: Export →')
+        next_export = W.QPushButton('Continue to step 5: Export →')
         next_export.clicked.connect(lambda: self.show_step(self.step_export)); sidebar.addWidget(next_export)
         outer_sidebar.addSpacing(20)
-        self.step_export = W.QGroupBox(); self.step_export.setAccessibleName('3. Export'); self.step_export.setObjectName('stepExport')
+        self.step_export = W.QGroupBox(); self.step_export.setAccessibleName('5. Export'); self.step_export.setObjectName('stepExport')
         self.step_export.setEnabled(False); outer_sidebar.addWidget(self.step_export)
         sidebar = W.QVBoxLayout(self.step_export)
-        section_title = W.QLabel('3. Export'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
+        section_title = W.QLabel('5. Export'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         export_hint = W.QLabel('Save the adjusted picture as TIFF, PNG or JPG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
-        self.export = W.QPushButton('3. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
+        self.export = W.QPushButton('5. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
         zoom_row = W.QHBoxLayout(); right.addLayout(zoom_row)
         self.zoom_out = W.QPushButton('−'); self.zoom_out.setFixedWidth(36); zoom_row.addWidget(self.zoom_out)
@@ -281,7 +292,7 @@ class Window(W.QMainWindow):
         file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
-        self.community_panel.setStyleSheet('QFrame#communityPanel { background:#0b2545; border:1px solid #3a6c9e; border-radius:6px; }')
+        self.community_panel.setStyleSheet('QFrame#communityPanel { background:#000000; border:1px solid #3a6c9e; border-radius:6px; }')
         community_layout = W.QVBoxLayout(self.community_panel); community_layout.setContentsMargins(10,8,10,8); community_layout.setSpacing(8)
         buttons = W.QHBoxLayout(); buttons.addStretch()
         self.coffee_button = W.QPushButton('Buy the Developer a Coffee')
@@ -572,6 +583,7 @@ class Window(W.QMainWindow):
         if not hasattr(self,'undo_action'):return
         busy=self.worker is not None or self.project_worker is not None
         self.review.setEnabled(not busy and self.files.count()>0)
+        self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
         ready=self.linear is not None and self._history_ready
         pending=ready and self.edit_state()!=self.history.states[self.history.index]
@@ -648,7 +660,7 @@ class Window(W.QMainWindow):
         self.project_worker=ProjectWorker(str(path),payload)
         self._project_io_path=str(path)
         self._project_io_ok=False
-        for widget in (self.step_load,self.step_adjust,self.step_export,self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(False)
+        for widget in (self.step_equipment,self.step_load,self.step_stack,self.step_adjust,self.step_export,self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(False)
         self.progress_bar.setRange(0,0);self.progress_text.setText('Saving project…' if payload is not None else 'Opening project…')
         self.project_worker.done.connect(self._project_saved if payload is not None else self._project_opened)
         self.project_worker.failed.connect(self._project_error);self.project_worker.finished.connect(self._project_finished)
@@ -690,7 +702,7 @@ class Window(W.QMainWindow):
         W.QMessageBox.critical(self,'Project failed',text)
     def _project_finished(self):
         self.project_worker.deleteLater();self.project_worker=None
-        self.step_load.setEnabled(True)
+        self.step_equipment.setEnabled(True);self.step_load.setEnabled(True);self.step_stack.setEnabled(True)
         for widget in (self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(True)
         self.step_adjust.setEnabled(self.linear is not None);self.step_export.setEnabled(self.linear is not None)
         self.progress_bar.setRange(0,100);self.progress_bar.setValue(100 if self._project_io_ok else 0)

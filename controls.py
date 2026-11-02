@@ -23,12 +23,10 @@ class VisibleGpuCheckBox(W.QCheckBox):
 
 
 class WheelSlider(W.QSlider):
-    """Keep the outer 5% on each side available for panel scrolling."""
+    """Mouse wheel scrolls the containing panel without changing adjustments."""
     def wheelEvent(self,event):
-        margin=self.width()*.05
-        if event.position().x()<margin or event.position().x()>self.width()-margin:
-            event.ignore();return
-        super().wheelEvent(event)
+        event.ignore()
+
 
 
 class SliderValueRow(W.QWidget):

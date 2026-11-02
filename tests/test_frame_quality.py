@@ -62,7 +62,7 @@ def test_review_preview_analysis_reference_and_main_image_preservation(tmp_path,
     assert window.files.item(0).text()==paths[1]
     assert window.files.count()==3 and window.linear is original and window.edit_state()==before
     captured=[];monkeypatch.setattr(W.QMessageBox,'about',lambda *args:captured.append(args[-1]))
-    window.about_action.trigger();assert 'Version 0.14.0' in captured[0]
+    window.about_action.trigger();assert 'Version 0.15.0' in captured[0]
     window.close()
 
 
@@ -76,3 +76,27 @@ def test_closing_review_cancels_worker_before_dialog_is_destroyed(tmp_path):
     dialog.reject();assert dialog._closing
     finish(app,dialog)
     assert not dialog.isVisible() and dialog.result()==W.QDialog.Rejected
+
+
+def test_review_sorts_all_columns_and_keeps_metrics_with_their_files():
+    from PySide6 import QtCore
+    app=W.QApplication.instance() or W.QApplication([])
+    dialog=FrameReviewDialog(['c.fit','a.fit','b.fit'],'None',selected='c.fit')
+    rows={p:dict(score=v,stars=int(v),fwhm=v,elongation=v,status=p,group=('same',)) for p,v in [('c.fit',2.),('a.fit',100.),('b.fit',10.)]}
+    for path,row in rows.items():dialog.receive_row(path,row)
+    for column in range(6):
+        for order in (QtCore.Qt.AscendingOrder,QtCore.Qt.DescendingOrder):
+            dialog.table.sortItems(column,order)
+            values=[dialog.table.item(i,column).text() if column in (0,5) else dialog.table.item(i,column).data(QtCore.Qt.UserRole) for i in range(3)]
+            assert values==sorted(values,reverse=order==QtCore.Qt.DescendingOrder)
+            assert dialog.selected_path()=='c.fit'
+    dialog.table.sortItems(1,QtCore.Qt.DescendingOrder)
+    rows['c.fit'].update(score=120.,stars=120,fwhm=12.,elongation=1.2)
+    dialog.receive_row('c.fit',rows['c.fit'])
+    for i in range(3):
+        path=dialog.table.item(i,0).data(QtCore.Qt.UserRole)
+        assert dialog.table.item(i,1).data(QtCore.Qt.UserRole)==rows[path]['score']
+        assert dialog.table.item(i,2).data(QtCore.Qt.UserRole)==rows[path]['stars']
+        assert dialog.table.item(i,3).data(QtCore.Qt.UserRole)==rows[path]['fwhm']
+    assert dialog.selected_path()=='c.fit'
+    dialog.close()
