@@ -121,7 +121,18 @@ a cropped file reopened later does not contain the pixels removed on export.
 Use Reset adjustments to restore all eight sliders to their starting values and
 turn off Compare. The loaded image and exposure list are preserved.
 
-## Latest Windows download (0.10)
+## Latest Windows download (0.11)
+[Download Astro Studio for Seestar 0.11](https://github.com/KennethRHans/Astrophotography/actions/runs/41379578047/artifacts/13112444289).
+Close the app, extract and run installer/AstroStudioForSeestar-0.11.0-Setup.exe.
+Includes self-contained .astro projects, undo/redo, RGB histogram with optional
+preview clipping warnings and the supplied telescope-and-child logo.
+All 22 local tests passed, including software OpenCL comparison. Windows tests,
+packaged project/JPEG checks, installation, desktop shortcut and upgrade checks
+passed. A full-resolution 2160 by 3840 Seestar stack also passed exact project
+pixel/crop/settings/history and FITS coordinate restoration checks locally.
+The Windows runner has no OpenCL device; this remains an unsigned preview.
+
+## Previous Windows download (0.10)
 [Download Astro Studio for Seestar 0.10](https://github.com/KennethRHans/Astrophotography/actions/runs/41367740262/artifacts/13107709307).
 Close the app, extract and run installer/AstroStudioForSeestar-0.10.0-Setup.exe.
 The GPU control now has a white checkbox outline and clear white checkmark.
