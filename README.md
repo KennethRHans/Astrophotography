@@ -108,7 +108,18 @@ a cropped file reopened later does not contain the pixels removed on export.
 Use Reset adjustments to restore all eight sliders to their starting values and
 turn off Compare. The loaded image and exposure list are preserved.
 
-## Latest Windows download (0.9)
+## Latest Windows download (0.10)
+[Download Astro Studio for Seestar 0.10](https://github.com/KennethRHans/Astrophotography/actions/runs/41367740262/artifacts/13107709307).
+Close the app, extract and run installer/AstroStudioForSeestar-0.10.0-Setup.exe.
+The GPU control now has a white checkbox outline and clear white checkmark.
+The image area has a blue frame and an empty-state message. Slider values follow
+the handles and remain below them during adjustment, reset and window resizing.
+Local GUI checks covered minimum/midpoint/maximum values for every slider.
+Windows tests, packaged launch/JPG export, fresh installation, desktop shortcut
+creation and the upgrade-from-0.8 preservation check passed. This preview remains
+unsigned; hardware OpenCL testing is unavailable on the Windows build runner.
+
+## Previous Windows download (0.9)
 [Download Astro Studio for Seestar](https://github.com/KennethRHans/Astrophotography/actions/runs/41365361806/artifacts/13106159783).
 Close the app, extract and run installer/AstroStudioForSeestar-0.9.0-Setup.exe.
 The new name appears in the header, window, Windows app list, executable metadata
@@ -271,3 +282,4 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
+
