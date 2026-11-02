@@ -1,3 +1,4 @@
-Header illustration: Seestar Cartoon.png, supplied by the project owner for inclusion in Seestar Studio.
-Bundled as seestar-cartoon.png, preserving the supplied original PNG bytes.
-The app scales the image only for display. No third-party stock photo is included.
+Header artwork supplied by the project owner as download.png in download.zip.
+Bundled as seestar-cartoon.png with original PNG bytes unchanged.
+The header mirrors it horizontally at display time, keeping it upright.
+This replaces the previous telescope cartoon.

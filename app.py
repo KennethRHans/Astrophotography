@@ -34,7 +34,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Seestar Studio • Preview 0.8')
+        self.setWindowTitle('Astro Studio for Seestar • Preview 0.9')
         self.resize(1200, 800)
         app = W.QApplication.instance()
         palette = QtGui.QPalette()
@@ -54,12 +54,16 @@ class Window(W.QMainWindow):
             QScrollArea { border: none; }
             QGroupBox#stepLoad, QGroupBox#stepAdjust, QGroupBox#stepExport {
                 border: 2px solid #3a6c9e; border-radius: 8px;
-                margin-top: 18px; padding-top: 16px; background: #0b2545;
+                margin-top: 4px; padding-top: 4px; background: #0b2545;
             }
-            QGroupBox#stepLoad::title, QGroupBox#stepAdjust::title, QGroupBox#stepExport::title {
-                subcontrol-origin: margin; left: 10px; padding: 2px 7px;
-                color: #ffffff; font-size: 15px; font-weight: bold;
+            QLabel#sectionTitle {
+                color: #ffffff; font-size: 20px; font-weight: bold;
+                background: #12395e; border: 1px solid #74b9e9;
+                border-radius: 5px; padding: 8px 10px; margin-bottom: 6px;
             }
+            QLabel#sectionTitle:disabled { color: #c3d5e9; background: #102b49; border-color: #466888; }
+            QFrame#gpuPanel { background: #0b2545; border: 2px solid #3a6c9e; border-radius: 8px; }
+            QCheckBox#gpuSwitch { background: transparent; color: #f1f6fd; font-size: 12px; }
             QGroupBox { color: #f1f6fd; }
             QLabel { color: #f1f6fd; background: transparent; }
             QLabel:disabled { color: #91a5bf; }
@@ -99,18 +103,23 @@ class Window(W.QMainWindow):
         self.header_art.setAlignment(QtCore.Qt.AlignCenter)
         self.artwork_path = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'seestar-cartoon.png'
         artwork=QtGui.QPixmap(str(self.artwork_path))
+        # Mirror only the displayed header image; preserve the supplied PNG bytes.
+        artwork=artwork.transformed(QtGui.QTransform().scale(-1,1))
         if not artwork.isNull():
             self.header_art.setPixmap(artwork.scaled(104,104,QtCore.Qt.KeepAspectRatio,QtCore.Qt.SmoothTransformation))
         else:
             self.header_art.setText('Artwork pending')
         header_row.addWidget(self.header_art)
         brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
-        title = W.QLabel('Seestar Studio'); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
+        title = W.QLabel('Astro Studio for Seestar'); title.setWordWrap(True); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
         disclaimer = W.QLabel('Not affiliated with Suzhou ZWO Co., Ltd.'); disclaimer.setWordWrap(True); disclaimer.setContentsMargins(0,0,0,0); brand.addWidget(disclaimer)
         left_column.addWidget(header)
-        self.use_gpu = W.QCheckBox('Use GPU for image adjustments')
+        self.gpu_panel = W.QFrame(); self.gpu_panel.setObjectName('gpuPanel')
+        gpu_row = W.QHBoxLayout(self.gpu_panel); gpu_row.setContentsMargins(12,10,12,10)
+        self.use_gpu = W.QCheckBox('Click to use GPU for faster image adjustments')
+        self.use_gpu.setObjectName('gpuSwitch')
         self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
-        self.use_gpu.toggled.connect(self.toggle_gpu); left_column.addWidget(self.use_gpu)
+        self.use_gpu.toggled.connect(self.toggle_gpu); gpu_row.addWidget(self.use_gpu); left_column.addWidget(self.gpu_panel)
         controls = W.QWidget(); controls.setObjectName('controlPanel')
         sidebar = W.QVBoxLayout(controls)
         scroll = W.QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(controls)
@@ -119,9 +128,10 @@ class Window(W.QMainWindow):
         instructions = W.QLabel('Instructions For Use:'); instructions.setStyleSheet('font-weight:bold; font-size:15px'); sidebar.addWidget(instructions)
         intro = W.QLabel('1. Load or stack\n2. Adjust and crop\n3. Export'); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
         outer_sidebar = sidebar
-        self.step_load = W.QGroupBox('1. Load or stack'); self.step_load.setObjectName('stepLoad')
+        self.step_load = W.QGroupBox(); self.step_load.setAccessibleName('1. Load or stack'); self.step_load.setObjectName('stepLoad')
         outer_sidebar.addWidget(self.step_load)
         sidebar = W.QVBoxLayout(self.step_load)
+        section_title = W.QLabel('1. Load or stack'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         load_hint = W.QLabel('Add individual exposures and stack them, or open a stack you already have.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
         self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
         self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
@@ -137,9 +147,10 @@ class Window(W.QMainWindow):
         self.next_adjust.clicked.connect(lambda: self.show_step(self.step_adjust))
         sidebar.addWidget(self.next_adjust)
         outer_sidebar.addSpacing(20)
-        self.step_adjust = W.QGroupBox('2. Adjust and crop'); self.step_adjust.setObjectName('stepAdjust')
+        self.step_adjust = W.QGroupBox(); self.step_adjust.setAccessibleName('2. Adjust and crop'); self.step_adjust.setObjectName('stepAdjust')
         self.step_adjust.setEnabled(False); outer_sidebar.addWidget(self.step_adjust)
         sidebar = W.QVBoxLayout(self.step_adjust)
+        section_title = W.QLabel('2. Adjust and crop'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
         self.slider_defaults = {}
@@ -174,9 +185,10 @@ class Window(W.QMainWindow):
         next_export = W.QPushButton('Continue to step 3: Export →')
         next_export.clicked.connect(lambda: self.show_step(self.step_export)); sidebar.addWidget(next_export)
         outer_sidebar.addSpacing(20)
-        self.step_export = W.QGroupBox('3. Export'); self.step_export.setObjectName('stepExport')
+        self.step_export = W.QGroupBox(); self.step_export.setAccessibleName('3. Export'); self.step_export.setObjectName('stepExport')
         self.step_export.setEnabled(False); outer_sidebar.addWidget(self.step_export)
         sidebar = W.QVBoxLayout(self.step_export)
+        section_title = W.QLabel('3. Export'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         export_hint = W.QLabel('Save the adjusted picture as TIFF, PNG or JPG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
         self.export = W.QPushButton('3. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
@@ -395,8 +407,10 @@ class Window(W.QMainWindow):
 if __name__ == '__main__':
     if sys.platform == 'win32':
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('SeestarStudio.Desktop')
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('AstroStudioForSeestar.Desktop')
     app = W.QApplication(sys.argv)
+    app.setApplicationName('Astro Studio for Seestar')
+    app.setApplicationDisplayName('Astro Studio for Seestar')
     app.setStyle('Fusion')
     window = Window(); window.show()
     if '--smoke-test' in sys.argv:
