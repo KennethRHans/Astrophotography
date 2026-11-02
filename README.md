@@ -101,7 +101,23 @@ a cropped file reopened later does not contain the pixels removed on export.
 Use Reset adjustments to restore all eight sliders to their starting values and
 turn off Compare. The loaded image and exposure list are preserved.
 
-## Latest Windows download (0.8)
+## Latest Windows download (0.9)
+[Download Astro Studio for Seestar](https://github.com/KennethRHans/Astrophotography/actions/runs/41365361806/artifacts/13106159783).
+Close the app, extract and run installer/AstroStudioForSeestar-0.9.0-Setup.exe.
+The new name appears in the header, window, Windows app list, executable metadata
+and shortcuts. GPU selection has its own dark blue field with the requested
+wording. Workflow headings are larger bordered title banners. The supplied
+replacement logo is mirrored left-to-right at display time, remaining upright.
+
+Windows tests, packaged launch, fresh installation and desktop shortcut checks
+passed. An actual upgrade from the 0.8 installer also passed: the old executable
+and shortcut were replaced, the Windows app entry was renamed, a user-created
+file was preserved and the upgraded app launched. Existing installs reuse their
+current directory. Remove any old taskbar pin and pin the renamed app again.
+This preview is unsigned. Hardware OpenCL testing remains unavailable on the
+Windows build runner; CPU fallback is retained.
+
+## Previous Windows download (0.8)
 [Download the Windows preview ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41362474358/artifacts/13106225612).
 Close the app, extract and run installer/SeestarStudio-0.8.0-Setup.exe.
 This release includes the black application background, dark blue step panels,
@@ -248,3 +264,4 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
+
