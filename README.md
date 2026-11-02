@@ -93,12 +93,21 @@ Plan tonight's observing at https://astrivanta.com/ and opens the default browse
 
 ## Windows download
 
-The 0.15 installer is being validated. Previous version:
+[Download Easy Astro Studio 0.15](https://github.com/KennethRHans/Astrophotography/actions/runs/41545469531/artifacts/13188367688).
+Close the app, extract the ZIP and run
+`installer/EasyAstroStudio-0.15.0-Setup.exe`.
+All 38 local tests passed, including numeric/text sorting in both directions,
+selection/row integrity during updates and wheel-disabled sliders. Windows tests,
+packaged launch/exposure review/project/export checks, installation, desktop
+shortcut, installed launch and upgrade with user-file preservation passed.
+This remains an unsigned preview; OpenCL device tests skip on the Windows runner.
+
+Previous version:
 
 [Download Easy Astro Studio 0.14](https://github.com/KennethRHans/Astrophotography/actions/runs/41536718015/artifacts/13184763084).
 Close the app, extract the ZIP and run
 `installer/EasyAstroStudio-0.14.0-Setup.exe`.
-All 38 local tests passed. Windows tests, packaged exposure preview/analysis,
+All 37 local tests passed. Windows tests, packaged exposure preview/analysis,
 project/JPEG checks, Program Files installation, desktop shortcut, installed
 launch and actual upgrade with user-file preservation checks passed. The runner
 has no OpenCL device, so hardware comparisons skip there. This remains an
