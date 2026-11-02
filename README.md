@@ -31,7 +31,15 @@ Plan tonight's observing at https://astrivanta.com/ and opens the default browse
 
 ## Windows download
 
-The 0.13 installer is being validated. Previous version:
+[Download Easy Astro Studio 0.13](https://github.com/KennethRHans/Astrophotography/actions/runs/41518195945/artifacts/13177820196).
+Close the app, extract the ZIP and run
+`installer/EasyAstroStudio-0.13.0-Setup.exe`.
+Windows tests, packaged launch (including the feedback dialog), installation,
+desktop shortcut and upgrade preservation checks passed. Feedback validation,
+success/error handling and retry were tested with simulated responses; no live
+test report was submitted to the owner's Formspree inbox.
+
+Previous version:
 
 [Download Easy Astro Studio 0.12](https://github.com/KennethRHans/Astrophotography/actions/runs/41383581168/artifacts/13114313119).
 Close the app, extract the ZIP and run
