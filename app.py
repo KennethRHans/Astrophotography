@@ -7,13 +7,7 @@ import engine
 
 from preview import ImagePreview
 
-class WheelSlider(W.QSlider):
-    """Keep the outer 5% on each side available for panel scrolling."""
-    def wheelEvent(self,event):
-        margin=self.width()*.05
-        if event.position().x()<margin or event.position().x()>self.width()-margin:
-            event.ignore();return
-        super().wheelEvent(event)
+from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 
 
 class Worker(QtCore.QThread):
@@ -34,7 +28,7 @@ class Worker(QtCore.QThread):
 class Window(W.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Astro Studio for Seestar • Preview 0.9')
+        self.setWindowTitle('Astro Studio for Seestar • Preview 0.10')
         self.resize(1200, 800)
         app = W.QApplication.instance()
         palette = QtGui.QPalette()
@@ -63,6 +57,9 @@ class Window(W.QMainWindow):
             }
             QLabel#sectionTitle:disabled { color: #c3d5e9; background: #102b49; border-color: #466888; }
             QFrame#gpuPanel { background: #0b2545; border: 2px solid #3a6c9e; border-radius: 8px; }
+            QCheckBox#gpuSwitch::indicator { width: 20px; height: 20px; }
+            QFrame#previewPanel { background: #000000; border: 2px solid #3a6c9e; border-radius: 8px; }
+            QLabel#sliderValue { color: #def2ff; font-weight: bold; }
             QCheckBox#gpuSwitch { background: transparent; color: #f1f6fd; font-size: 12px; }
             QGroupBox { color: #f1f6fd; }
             QLabel { color: #f1f6fd; background: transparent; }
@@ -116,7 +113,7 @@ class Window(W.QMainWindow):
         left_column.addWidget(header)
         self.gpu_panel = W.QFrame(); self.gpu_panel.setObjectName('gpuPanel')
         gpu_row = W.QHBoxLayout(self.gpu_panel); gpu_row.setContentsMargins(12,10,12,10)
-        self.use_gpu = W.QCheckBox('Click to use GPU for faster image adjustments')
+        self.use_gpu = VisibleGpuCheckBox('Click to use GPU for faster image adjustments')
         self.use_gpu.setObjectName('gpuSwitch')
         self.use_gpu.setToolTip('Accelerates stretch, saturation and smoothing. Alignment and stacking use CPU.')
         self.use_gpu.toggled.connect(self.toggle_gpu); gpu_row.addWidget(self.use_gpu); left_column.addWidget(self.gpu_panel)
@@ -153,14 +150,14 @@ class Window(W.QMainWindow):
         section_title = W.QLabel('2. Adjust and crop'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
+        self.slider_rows = {}
         self.slider_defaults = {}
         for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
             sidebar.addWidget(W.QLabel(label))
-            slider = WheelSlider(QtCore.Qt.Horizontal); slider.setMinimumHeight(36); slider.setRange(low, high); slider.setValue(default); sidebar.addWidget(slider); self.sliders[label] = slider
+            row = SliderValueRow(low,high,default); sidebar.addWidget(row)
+            slider = row.slider; self.sliders[label] = slider; self.slider_rows[label] = row
             self.slider_defaults[label] = default
             slider.valueChanged.connect(self.schedule_preview)
-            value = W.QLabel(str(default)); sidebar.addWidget(value)
-            slider.valueChanged.connect(lambda n, widget=value: widget.setText(str(n)))
         hint = W.QLabel('Background correction can remove faint extended nebulosity.\nStart low and compare. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.reset = W.QPushButton('Reset adjustments')
@@ -198,7 +195,10 @@ class Window(W.QMainWindow):
         self.zoom_fit = W.QPushButton('Fit'); zoom_row.addWidget(self.zoom_fit)
         self.zoom_actual = W.QPushButton('100%'); zoom_row.addWidget(self.zoom_actual)
         self.zoom_label = W.QLabel('Fit'); zoom_row.addWidget(self.zoom_label); zoom_row.addStretch()
-        self.preview = ImagePreview(); right.addWidget(self.preview,4)
+        self.preview_panel = W.QFrame(); self.preview_panel.setObjectName('previewPanel')
+        picture_layout = W.QVBoxLayout(self.preview_panel); picture_layout.setContentsMargins(4,4,4,4)
+        self.preview = ImagePreview('Processed picture will appear here.'); picture_layout.addWidget(self.preview)
+        right.addWidget(self.preview_panel,4)
         zoom_hint = W.QLabel('Drag crop edges/corners • Drag inside to move • Wheel to zoom • Right-drag to pan')
         zoom_hint.setWordWrap(True); right.addWidget(zoom_hint)
         self.zoom_out.clicked.connect(lambda: self.preview.zoom_by(.8))

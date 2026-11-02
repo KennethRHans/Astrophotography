@@ -1,4 +1,4 @@
-# Astro Studio for Seestar — preview 0.9
+# Astro Studio for Seestar — preview 0.10
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
@@ -12,6 +12,13 @@ This setting starts off and is experimental. Star matching, registration,
 stacking, FITS I/O, background fitting and percentile calculations remain on CPU.
 Transfers and CPU work may outweigh GPU savings for small previews or when
 smoothing is off. No RTX 5070 performance measurements are available yet.
+
+## Control visibility and image area (0.10)
+The GPU checkbox has a white outline and a distinct white checkmark when on.
+The image preview has a blue border and displays Processed picture will appear
+here. until an image is loaded. Each slider value now follows the handle and is
+centered directly beneath it, including when resetting or resizing the sidebar.
+The value stays inside the control at the ends of the slider range.
 
 ## Astro Studio for Seestar (0.9)
 The window/header, Windows app entry, executable, Start Menu and desktop shortcut
@@ -264,4 +271,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-

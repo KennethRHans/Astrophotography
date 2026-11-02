@@ -7,11 +7,12 @@ import engine
 class ImagePreview(W.QGraphicsView):
     selection = QtCore.Signal(int,int,int,int)
     zoomChanged = QtCore.Signal(float)
-    def __init__(self, text='Your image will appear here'):
+    def __init__(self, text='Processed picture will appear here.'):
         super().__init__()
         self.setScene(W.QGraphicsScene(self))
         self.item = W.QGraphicsPixmapItem(); self.scene().addItem(self.item)
         self.item.setTransformationMode(QtCore.Qt.SmoothTransformation)
+        self.empty_text = text
         self.source_size = None
         self.selection_pixels = None
         self.ratio = None
@@ -139,7 +140,11 @@ class ImagePreview(W.QGraphicsView):
             self.mode=None;event.accept()
     def paintEvent(self,event):
         super().paintEvent(event)
-        if not self.source_size or self.item.pixmap().isNull(): return
+        if not self.source_size or self.item.pixmap().isNull():
+            painter=QtGui.QPainter(self.viewport());painter.setPen(QtGui.QColor('#c3d9ef'))
+            font=painter.font();font.setPixelSize(18);painter.setFont(font)
+            painter.drawText(self.viewport().rect().adjusted(24,24,-24,-24),QtCore.Qt.AlignCenter|QtCore.Qt.TextWordWrap,self.empty_text)
+            painter.end();return
         painter=QtGui.QPainter(self.viewport())
         area=self.image_rect().intersected(self.viewport().rect())
         painter.setClipRect(area)

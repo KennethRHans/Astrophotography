@@ -1,7 +1,7 @@
 [Setup]
 AppId=Seestar Studio Preview
 AppName=Astro Studio for Seestar
-AppVersion=0.9.0
+AppVersion=0.10.0
 DefaultDirName={autopf}\Astro Studio for Seestar
 UsePreviousAppDir=yes
 DefaultGroupName=Astro Studio for Seestar
@@ -11,7 +11,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=installer
-OutputBaseFilename=AstroStudioForSeestar-0.9.0-Setup
+OutputBaseFilename=AstroStudioForSeestar-0.10.0-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
