@@ -1,7 +1,20 @@
-# Astro Studio for Seestar — preview 0.10
+# Astro Studio for Seestar — preview 0.11
 
 A Windows desktop prototype for Seestar color FITS exposures and existing stacks.
 Built for Windows 11; CPU processing. Optional OpenCL acceleration can use the RTX 5070 for image adjustments.
+
+## Projects, history and histogram (0.11)
+Use Open project and Save project in the toolbar to resume an editing session.
+A self-contained .astro project includes the original linear RGB image, FITS
+header, adjustments, crop, view and up to 100 undo states. The individual raw
+exposures are referenced by filename and are not embedded. Project save/reopen
+runs in the background; keep original acquisition files backed up separately.
+Undo/Redo use Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z). A slider drag or crop gesture
+is one undo operation. Reset adjustments and Apply crop can also be undone.
+The RGB histogram reports clipping in the rendered preview sample. Optional
+blue shadows/red highlights are preview-only warnings and never appear in exports.
+The replacement telescope-and-child PNG already has the requested horizontal
+orientation (child on the left), so it is displayed without another flip.
 
 ## Optional GPU adjustments (0.4)
 Check Use GPU for adjustments to accelerate stretching, saturation and Gaussian
@@ -263,7 +276,7 @@ Cancellation takes effect between alignment calls and stack row blocks.
 Export and single-frame load can briefly pause the GUI on large files.
 
 This preview has no dark/flat/bias calibration, automatic frame quality ranking,
-photometric color calibration, sharpening, project saving,
+photometric color calibration, sharpening,
 automatic updates. Background percentile subtraction is a
 simple artistic adjustment and can suppress faint signal: keep linear FITS.
 No AI-generated detail is added. Outlier rejection is limited with very few frames.
@@ -282,4 +295,3 @@ python app.py
 Libraries retain their respective licenses, including Qt/PySide6 LGPL terms.
 Review bundled dependency licenses before redistribution. This project is
 independent and is not affiliated with or endorsed by Seestar or ZWO.
-

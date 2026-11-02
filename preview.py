@@ -7,6 +7,8 @@ import engine
 class ImagePreview(W.QGraphicsView):
     selection = QtCore.Signal(int,int,int,int)
     zoomChanged = QtCore.Signal(float)
+    editStarted = QtCore.Signal()
+    editFinished = QtCore.Signal()
     def __init__(self, text='Processed picture will appear here.'):
         super().__init__()
         self.setScene(W.QGraphicsScene(self))
@@ -98,6 +100,7 @@ class ImagePreview(W.QGraphicsView):
         elif self.image_rect().contains(pos):
             self.mode='new'
         else: self.mode=None
+        if self.mode:self.editStarted.emit()
         event.accept()
     def mouseMoveEvent(self,event):
         pos=event.position().toPoint()
@@ -137,7 +140,7 @@ class ImagePreview(W.QGraphicsView):
             self.pan_start=None;self.setCursor(QtCore.Qt.CrossCursor);event.accept();return
         if event.button()==QtCore.Qt.LeftButton:
             if self.mode: self.mouseMoveEvent(event)
-            self.mode=None;event.accept()
+            self.mode=None;self.editFinished.emit();event.accept()
     def paintEvent(self,event):
         super().paintEvent(event)
         if not self.source_size or self.item.pixmap().isNull():

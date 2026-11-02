@@ -1,4 +1,6 @@
 import sys
+import copy
+import json
 from pathlib import Path
 import numpy as np
 import cv2
@@ -6,6 +8,8 @@ from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 
 from preview import ImagePreview
+from project_store import EditHistory,validate_state,save_project,load_project
+from histogram import HistogramView,histogram_data
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 
@@ -25,11 +29,30 @@ class Worker(QtCore.QThread):
         except Exception as exc:
             self.failed.emit(str(exc))
 
+class ProjectWorker(QtCore.QThread):
+    done=QtCore.Signal(object)
+    failed=QtCore.Signal(str)
+    def __init__(self,path,payload=None):
+        super().__init__();self.path=path;self.payload=payload
+    def run(self):
+        try:
+            if self.payload is None:self.done.emit(load_project(self.path))
+            else:
+                save_project(self.path,*self.payload);self.done.emit(self.path)
+        except Exception as exc:self.failed.emit(str(exc))
+
+
 class Window(W.QMainWindow):
-    def __init__(self):
+    def __init__(self,ask_on_close=True):
         super().__init__()
-        self.setWindowTitle('Astro Studio for Seestar • Preview 0.10')
-        self.resize(1200, 800)
+        self.ask_on_close=ask_on_close
+        self.history=EditHistory()
+        self._history_ready=False;self._restoring=False
+        self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
+        self.source_paths=[]
+        self.setWindowTitle('Astro Studio for Seestar • Preview 0.11')
+        self.base_title=self.windowTitle()
+        self.resize(1200, 880)
         app = W.QApplication.instance()
         palette = QtGui.QPalette()
         for role,color in [(QtGui.QPalette.Window,'#000000'),(QtGui.QPalette.WindowText,'#f1f6fd'),
@@ -46,6 +69,8 @@ class Window(W.QMainWindow):
         self.setStyleSheet("""
             QMainWindow, QWidget#appCanvas, QWidget#controlPanel, QScrollArea { background: #000000; color: #f1f6fd; }
             QScrollArea { border: none; }
+            QToolBar { background: #000000; border-bottom: 1px solid #3a6c9e; spacing: 6px; }
+            QFrame#histogramPanel { background: #0b2545; border: 1px solid #3a6c9e; border-radius: 5px; }
             QGroupBox#stepLoad, QGroupBox#stepAdjust, QGroupBox#stepExport {
                 border: 2px solid #3a6c9e; border-radius: 8px;
                 margin-top: 4px; padding-top: 4px; background: #0b2545;
@@ -100,8 +125,7 @@ class Window(W.QMainWindow):
         self.header_art.setAlignment(QtCore.Qt.AlignCenter)
         self.artwork_path = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))/'assets'/'seestar-cartoon.png'
         artwork=QtGui.QPixmap(str(self.artwork_path))
-        # Mirror only the displayed header image; preserve the supplied PNG bytes.
-        artwork=artwork.transformed(QtGui.QTransform().scale(-1,1))
+        # Supplied replacement PNG already has the requested horizontal orientation.
         if not artwork.isNull():
             self.header_art.setPixmap(artwork.scaled(104,104,QtCore.Qt.KeepAspectRatio,QtCore.Qt.SmoothTransformation))
         else:
@@ -158,6 +182,8 @@ class Window(W.QMainWindow):
             slider = row.slider; self.sliders[label] = slider; self.slider_rows[label] = row
             self.slider_defaults[label] = default
             slider.valueChanged.connect(self.schedule_preview)
+            slider.sliderPressed.connect(self.commit_history)
+            slider.sliderReleased.connect(self.commit_history)
         hint = W.QLabel('Background correction can remove faint extended nebulosity.\nStart low and compare. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.reset = W.QPushButton('Reset adjustments')
@@ -207,10 +233,31 @@ class Window(W.QMainWindow):
         self.zoom_actual.clicked.connect(lambda: self.preview.set_zoom(1))
         self.preview.zoomChanged.connect(self.zoom_changed)
         self.preview.selection.connect(self.select_crop)
+        self.preview.editStarted.connect(self.commit_history)
+        self.preview.editFinished.connect(self.commit_history)
         self.progress_text = W.QLabel('Ready'); right.addWidget(self.progress_text)
         self.progress_bar = W.QProgressBar(); self.progress_bar.setRange(0, 100); self.progress_bar.setValue(0); right.addWidget(self.progress_bar)
+        self.histogram_panel=W.QFrame();self.histogram_panel.setObjectName('histogramPanel')
+        hist_layout=W.QVBoxLayout(self.histogram_panel);hist_layout.setContentsMargins(8,5,8,5);hist_layout.setSpacing(3)
+        hist_layout.addWidget(W.QLabel('RGB histogram • Black → White • Log scale • Preview sample'))
+        self.histogram=HistogramView();hist_layout.addWidget(self.histogram)
+        self.clip_summary=W.QLabel('Black clipping: 0% • White clipping: 0%');hist_layout.addWidget(self.clip_summary)
+        self.mark_clipping=W.QCheckBox('Mark clipped pixels in preview (blue: black, red: white)')
+        self.mark_clipping.toggled.connect(self.schedule_preview);hist_layout.addWidget(self.mark_clipping)
+        self.histogram_panel.hide();right.addWidget(self.histogram_panel)
         self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
+        self.history_timer=QtCore.QTimer();self.history_timer.setSingleShot(True);self.history_timer.timeout.connect(self.commit_history)
+        toolbar=self.addToolBar('Projects and history');toolbar.setMovable(False)
+        self.open_project_action=QtGui.QAction('Open project…',self);self.open_project_action.setShortcut('Ctrl+O');self.open_project_action.triggered.connect(self.open_project_dialog)
+        self.save_project_action=QtGui.QAction('Save project',self);self.save_project_action.setShortcut('Ctrl+S');self.save_project_action.triggered.connect(self.save_project_dialog)
+        self.save_as_action=QtGui.QAction('Save project as…',self);self.save_as_action.setShortcut('Ctrl+Shift+S');self.save_as_action.triggered.connect(lambda: self.save_project_dialog(save_as=True))
+        self.undo_action=QtGui.QAction('Undo',self);self.undo_action.setShortcut('Ctrl+Z');self.undo_action.triggered.connect(self.undo_edit)
+        self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(['Ctrl+Y','Ctrl+Shift+Z']);self.redo_action.triggered.connect(self.redo_edit)
+        for action in (self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
+        file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
+        edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
+        self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
     def zoom_changed(self,scale):
         self.zoom_label.setText(f'{scale*100:.0f}%')
@@ -222,9 +269,12 @@ class Window(W.QMainWindow):
         paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
         existing = {self.files.item(i).text() for i in range(self.files.count())}
         self.files.addItems([p for p in paths if p not in existing])
+        self.update_actions()
     def remove_files(self):
         for item in self.files.selectedItems(): self.files.takeItem(self.files.row(item))
+        self.update_actions()
     def start(self, single):
+        if self.project_worker is not None:return
         if single:
             path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
             if not path: return
@@ -233,6 +283,8 @@ class Window(W.QMainWindow):
             paths = [self.files.item(i).text() for i in range(self.files.count())]
             if len(paths) < 2:
                 W.QMessageBox.information(self, 'Add exposures', 'Add at least two individual exposures.'); return
+        if not self.allow_replace():return
+        self.pending_source_paths=list(paths)
         self.pending_source_name = Path(paths[0]).stem
         self.log.appendPlainText('Starting. Alignment uses the first listed exposure as reference.\nTemporary disk space needed: approximately 12 bytes × pixels × frames.')
         for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(False)
@@ -246,6 +298,7 @@ class Window(W.QMainWindow):
         self.worker.failed.connect(self.processing_failed)
         self.worker.finished.connect(self.finished)
         self.worker.start()
+        self.update_actions()
     def update_progress(self, completed, total, stage):
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(completed)
@@ -262,7 +315,12 @@ class Window(W.QMainWindow):
         for control in (self.run, self.open, self.add, self.remove, self.bayer): control.setEnabled(True)
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
+        self.update_actions()
     def loaded(self, linear, header):
+        self._history_ready=False
+        self.project_path=None
+        self.source_paths=list(getattr(self,'pending_source_paths',[]))
+        self.applied_crop=(0,0,linear.shape[1],linear.shape[0])
         self.source_name = getattr(self, 'pending_source_name', 'image')
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
@@ -275,7 +333,11 @@ class Window(W.QMainWindow):
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))
+        self.histogram_panel.show()
         self.update_preview()
+        self.history.reset(self.edit_state());self._history_ready=True
+        self._saved_signature=None if self.worker is not None and not self.worker.single else self.project_signature()
+        self.update_actions()
     def toggle_gpu(self, enabled):
         self.gpu = None
         if enabled:
@@ -305,6 +367,7 @@ class Window(W.QMainWindow):
         return ratio
     def guides_changed(self, text):
         self.preview.guide = text; self.preview.viewport().update()
+        self.schedule_history()
     def ratio_changed(self):
         if self.linear is None:
             return
@@ -331,9 +394,11 @@ class Window(W.QMainWindow):
         self.preview.selection_pixels=self.crop_bounds
         self.crop_dimensions.setText(f'Crop: {x1-x0:,} × {y1-y0:,} px • X {x0:,}, Y {y0:,}')
         self.preview.update_band()
+        if self.preview.mode is None:self.schedule_history()
     def crop_selected(self):
         if self.linear is None:
             return
+        self.commit_history()
         h,w,_=self.linear.shape
         x0,y0,x1,y1=self.crop_bounds
         margins=dict(left=x0,right=w-x1,top=y0,bottom=h-y1)
@@ -343,25 +408,35 @@ class Window(W.QMainWindow):
             self.linear, self.header = engine.crop_image(self.linear, self.header, **margins)
         except ValueError as exc:
             W.QMessageBox.information(self, 'Adjust crop', str(exc)); return
+        ox,oy,_,_=self.applied_crop
+        self.applied_crop=(ox+x0,oy+y0,ox+x1,oy+y1)
         self.background = engine.background_model(self.linear)
         self.reset_crop_controls()
         self.log.appendPlainText(f'Crop applied: {self.linear.shape[1]} × {self.linear.shape[0]} pixels. Restore full frame is available.')
         self.update_preview()
+        self.commit_history()
     def restore_full_frame(self):
         if self.linear is None:
             return
+        self.commit_history()
+        self.applied_crop=(0,0,self.original_linear.shape[1],self.original_linear.shape[0])
         self.linear, self.header = self.original_linear, self.original_header.copy()
         self.background = engine.background_model(self.linear)
         self.reset_crop_controls()
         self.log.appendPlainText('Full frame restored. Adjustments preserved.')
         self.update_preview()
+        self.commit_history()
     def reset_adjustments(self):
+        self.commit_history()
         for name, slider in self.sliders.items():
             slider.setValue(self.slider_defaults[name])
         self.baseline.setChecked(False)
         self.timer.stop()
         self.update_preview()
-    def schedule_preview(self): self.timer.start(150)
+        self.commit_history()
+    def schedule_preview(self):
+        self.timer.start(150)
+        self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
         if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1)
@@ -375,7 +450,15 @@ class Window(W.QMainWindow):
         small = cv2.resize(self.linear, (max(1, self.linear.shape[1]//step), max(1, self.linear.shape[0]//step)), interpolation=cv2.INTER_AREA)
         preview = engine.render(small, *self.settings(), model=self.background, gpu=self.gpu)
         self.report_gpu_failure()
+        valid=(small>0).all(axis=-1)
+        bins,black,white=histogram_data(preview,valid)
+        self.histogram.set_data(bins)
+        self.clip_summary.setText(f'Black clipping: {black:.3f}% • White clipping: {white:.3f}% (preview)')
+        self.clip_summary.setStyleSheet('color: #ffce7a;' if max(black,white)>.1 else 'color: #c3d9ef;')
         pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
+        if self.mark_clipping.isChecked():
+            pixels[np.any(preview<=0,axis=-1)&valid]=(45,105,255)
+            pixels[np.any(preview>=1,axis=-1)&valid]=(255,65,65)
         image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
         self.preview.set_image(image,(self.linear.shape[1],self.linear.shape[0]))
     def save(self):
@@ -397,12 +480,158 @@ class Window(W.QMainWindow):
             self.report_gpu_failure()
             self.log.appendPlainText('Saved '+path)
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
+    def edit_state(self):
+        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},compare=self.baseline.isChecked(),
+                    applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
+    def project_signature(self):
+        return json.dumps(dict(state=self.edit_state(),input_files=[self.files.item(i).text() for i in range(self.files.count())],bayer=self.bayer.currentText()),sort_keys=True)
+    def schedule_history(self):
+        if self._history_ready and not self._restoring:
+            if self.preview.mode is not None or any(slider.isSliderDown() for slider in self.sliders.values()):self.history_timer.stop()
+            else:self.history_timer.start(400)
+            self.update_actions()
+    def commit_history(self):
+        if not self._history_ready or self._restoring:return
+        self.history_timer.stop();self.history.push(self.edit_state());self.update_actions()
+    def update_actions(self):
+        if not hasattr(self,'undo_action'):return
+        busy=self.worker is not None or self.project_worker is not None
+        ready=self.linear is not None and self._history_ready
+        pending=ready and self.edit_state()!=self.history.states[self.history.index]
+        self.undo_action.setEnabled(ready and not busy and (self.history.can_undo or pending))
+        self.redo_action.setEnabled(ready and not busy and self.history.can_redo and not pending)
+        self.save_project_action.setEnabled(ready and not busy);self.save_as_action.setEnabled(ready and not busy)
+        self.open_project_action.setEnabled(not busy)
+        if ready:
+            self._dirty=self.project_signature()!=self._saved_signature
+            name=Path(self.project_path).name if self.project_path else engine.export_basename(self.header,self.source_name)
+            self.setWindowTitle(self.base_title+' • '+name+(' *' if self._dirty else ''))
+    def validate_edit_state(self,state,shape):
+        validate_state(state,shape,{name:(slider.minimum(),slider.maximum()) for name,slider in self.sliders.items()})
+        if self.crop_ratio.findText(state['ratio'])<0 or self.guides.findText(state['guides'])<0:raise ValueError('Project contains unsupported crop guides or ratio')
+    def apply_edit_state(self,state):
+        self.validate_edit_state(state,self.original_linear.shape)
+        self._restoring=True;self.history_timer.stop();self.timer.stop()
+        try:
+            rect=tuple(state['applied_crop'])
+            if rect!=self.applied_crop:
+                x0,y0,x1,y1=rect;h,w,_=self.original_linear.shape
+                self.linear,self.header=engine.crop_image(self.original_linear,self.original_header,x0,w-x1,y0,h-y1)
+                self.applied_crop=rect;self.background=engine.background_model(self.linear)
+            for name,value in state['sliders'].items():
+                widget=self.sliders[name];previous=widget.blockSignals(True);widget.setValue(value);widget.blockSignals(previous)
+                self.slider_rows[name].position_value()
+            for widget,value in ((self.baseline,state['compare']),(self.crop_ratio,state['ratio']),(self.guides,state['guides'])):
+                previous=widget.blockSignals(True)
+                if widget is self.baseline:widget.setChecked(value)
+                else:widget.setCurrentText(value)
+                widget.blockSignals(previous)
+            self.preview.ratio=self.active_crop_ratio();self.preview.guide=self.guides.currentText()
+            self.select_crop(*state['selection']);self.update_preview()
+        finally:self._restoring=False
+        self.update_actions()
+    def undo_edit(self):
+        self.commit_history()
+        if self.history.can_undo:self.apply_edit_state(self.history.undo())
+    def redo_edit(self):
+        self.commit_history()
+        if self.history.can_redo:self.apply_edit_state(self.history.redo())
+    def allow_replace(self):
+        self.commit_history()
+        if not self._dirty or not self.ask_on_close:return True
+        return W.QMessageBox.question(self,'Replace current image?','Unsaved project changes will be lost. Cancel and save the project first to keep them.',W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Cancel)==W.QMessageBox.Discard
+    def project_manifest(self):
+        self.commit_history()
+        center=self.preview.mapToScene(self.preview.viewport().rect().center())
+        return dict(state=self.edit_state(),source_name=self.source_name,source_files=self.source_paths,
+                    input_files=[self.files.item(i).text() for i in range(self.files.count())],bayer=self.bayer.currentText(),
+                    history=dict(states=copy.deepcopy(self.history.states),index=self.history.index),
+                    view=dict(fit=self.preview.fit_mode,zoom=self.preview.transform().m11(),center=[center.x(),center.y()],
+                              mark_clipping=self.mark_clipping.isChecked(),gpu=self.use_gpu.isChecked()))
+    def save_project_dialog(self,checked=False,save_as=False,after_save=None):
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
+        path=None if save_as else self.project_path
+        if not path:
+            initial=str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DocumentsLocation))/(engine.export_basename(self.header,self.source_name)+'.astro'))
+            path,_=W.QFileDialog.getSaveFileName(self,'Save project',initial,'Astro Studio project (*.astro)')
+            if not path:return
+            if Path(path).suffix.lower()!='.astro':path+='.astro'
+        self.save_project_path(path,after_save)
+    def save_project_path(self,path,after_save=None):
+        self._after_io=after_save
+        payload=(self.original_linear,self.original_header.copy(),self.project_manifest())
+        self._start_project_io(path,payload)
+    def open_project_dialog(self):
+        path,_=W.QFileDialog.getOpenFileName(self,'Open saved project','','Astro Studio project (*.astro)')
+        if path and self.allow_replace():self.open_project_path(path)
+    def open_project_path(self,path):self._after_io=None;self._start_project_io(path,None)
+    def _start_project_io(self,path,payload):
+        if self.worker is not None or self.project_worker is not None:return
+        self.timer.stop();self.history_timer.stop();self.preview.mode=None
+        self.project_worker=ProjectWorker(str(path),payload)
+        self._project_io_path=str(path)
+        self._project_io_ok=False
+        for widget in (self.step_load,self.step_adjust,self.step_export,self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(False)
+        self.progress_bar.setRange(0,0);self.progress_text.setText('Saving project…' if payload is not None else 'Opening project…')
+        self.project_worker.done.connect(self._project_saved if payload is not None else self._project_opened)
+        self.project_worker.failed.connect(self._project_error);self.project_worker.finished.connect(self._project_finished)
+        self.project_worker.start();self.update_actions()
+    def _project_saved(self,path):
+        self._project_io_ok=True
+        self.project_path=str(path);self._saved_signature=self.project_signature();self._dirty=False
+        self.log.appendPlainText('Project saved: '+str(path));self.progress_text.setText('Project saved • 100%')
+    def _project_opened(self,payload):
+        try:
+            linear,header,meta=payload
+            self.validate_edit_state(meta['state'],linear.shape)
+            for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
+            self.loaded(linear,header)
+            self.source_name=str(meta.get('source_name','image'))
+            self.source_paths=list(meta.get('source_files',[]))
+            self.files.clear();self.files.addItems(meta.get('input_files',[]))
+            if self.bayer.findText(meta.get('bayer','Auto'))>=0:self.bayer.setCurrentText(meta.get('bayer','Auto'))
+            self.apply_edit_state(meta['state'])
+            history=meta.get('history')
+            if history:self.history.states=copy.deepcopy(history['states']);self.history.index=history['index']
+            else:self.history.reset(self.edit_state())
+            view=meta.get('view',{})
+            self.mark_clipping.setChecked(bool(view.get('mark_clipping',False)))
+            self.use_gpu.setChecked(bool(view.get('gpu',False)))
+            self.update_preview()
+            if view.get('fit',True):self.preview.fit_image()
+            else:
+                zoom=float(view.get('zoom',1))
+                if np.isfinite(zoom):self.preview.set_zoom(zoom)
+                center=view.get('center',[])
+                if len(center)==2 and all(isinstance(v,(float,int)) and np.isfinite(v) for v in center):self.preview.centerOn(*center)
+            self.project_path=self._project_io_path;self._saved_signature=self.project_signature();self._dirty=False
+            self._project_io_ok=True
+            self.progress_text.setText('Project opened • 100%');self.log.appendPlainText('Project image, editing state and history restored.')
+        except Exception as exc:self._project_error(str(exc))
+    def _project_error(self,text):
+        self._after_io=None;self.processing_failed('Project: '+text)
+        W.QMessageBox.critical(self,'Project failed',text)
+    def _project_finished(self):
+        self.project_worker.deleteLater();self.project_worker=None
+        self.step_load.setEnabled(True)
+        for widget in (self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(True)
+        self.step_adjust.setEnabled(self.linear is not None);self.step_export.setEnabled(self.linear is not None)
+        self.progress_bar.setRange(0,100);self.progress_bar.setValue(100 if self._project_io_ok else 0)
+        self.update_actions()
+        callback=self._after_io;self._after_io=None
+        if callback:QtCore.QTimer.singleShot(0,callback)
     def closeEvent(self, event):
+        if self.project_worker is not None:
+            self.log.appendPlainText('Project save/load is in progress. Close again after it finishes.');event.ignore();return
         if self.worker and self.worker.isRunning():
-            self.worker.requestInterruption()
-            self.log.appendPlainText('Cancelling. Close again after processing stops.')
-            event.ignore()
-        else: event.accept()
+            self.worker.requestInterruption();self.log.appendPlainText('Cancelling. Close again after processing stops.');event.ignore();return
+        self.commit_history()
+        if self._dirty and self.ask_on_close:
+            result=W.QMessageBox.question(self,'Save project before closing?','Save your image and editing state as a project before closing?',W.QMessageBox.Save|W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Save)
+            if result==W.QMessageBox.Cancel:event.ignore();return
+            if result==W.QMessageBox.Save:
+                event.ignore();self.save_project_dialog(after_save=self.close);return
+        event.accept()
 
 if __name__ == '__main__':
     if sys.platform == 'win32':
@@ -412,7 +641,7 @@ if __name__ == '__main__':
     app.setApplicationName('Astro Studio for Seestar')
     app.setApplicationDisplayName('Astro Studio for Seestar')
     app.setStyle('Fusion')
-    window = Window(); window.show()
+    window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()
     if '--smoke-test' in sys.argv:
         from astropy.io import fits
         assert window.artwork_path.is_file(), 'Bundled header artwork missing'
@@ -442,6 +671,12 @@ if __name__ == '__main__':
             from PIL import Image
             with Image.open(output) as exported:
                 assert exported.format=='JPEG'
+            window.commit_history()
+            project=Path(folder)/'smoke.astro'
+            save_project(project,window.original_linear,window.original_header,window.project_manifest())
+            restored,restored_header,meta=load_project(project)
+            assert np.array_equal(restored,window.original_linear)
+            assert meta['state']==window.edit_state()
         window.close()
         sys.exit(0)
     sys.exit(app.exec())

@@ -1,0 +1,52 @@
+import os,time
+os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
+import numpy as np
+from astropy.io import fits
+from PySide6.QtWidgets import QApplication,QMessageBox
+from PySide6.QtTest import QTest
+from app import Window
+
+
+def finish_io(app,window):
+    deadline=time.monotonic()+15
+    while window.project_worker is not None and time.monotonic()<deadline:
+        app.processEvents();time.sleep(.01)
+    assert window.project_worker is None
+    assert window._project_io_ok
+
+
+def test_undo_crop_reset_and_project_reopen(tmp_path,monkeypatch):
+    app=QApplication.instance() or QApplication([])
+    window=Window(ask_on_close=True);window.show();app.processEvents()
+    data=np.random.default_rng(17).uniform(100,1000,(120,160,3)).astype('float32')
+    window.loaded(data,fits.Header({'OBJECT':'C 56','CRPIX1':80.,'CRPIX2':60.}));app.processEvents()
+    window.sliders['Stretch'].setSliderDown(True)
+    window.sliders['Stretch'].setValue(40);QTest.qWait(450)
+    assert window.history.index==0
+    window.sliders['Stretch'].setValue(65);window.sliders['Stretch'].setSliderDown(False)
+    assert window.history.index==1
+    window.sliders['Saturation %'].setValue(140);window.commit_history()
+    window.undo_action.trigger();assert window.sliders['Saturation %'].value()==100
+    window.redo_action.trigger();assert window.sliders['Saturation %'].value()==140
+    window.select_crop(10,20,150,110);window.crop_selected()
+    assert window.applied_crop==(10,20,150,110)
+    window.undo_edit();np.testing.assert_array_equal(window.linear,data)
+    window.redo_edit();np.testing.assert_array_equal(window.linear,data[20:110,10:150])
+    before=window.edit_state();window.reset_adjustments();window.undo_edit();assert window.edit_state()==before
+    window.files.addItem('C:/missing/light.fit')
+    path=tmp_path/'C56.astro';window.save_project_path(path);finish_io(app,window)
+    assert not window._dirty
+    original_display=window.linear.copy();saved=window.edit_state()
+    window.sliders['Stretch'].setValue(80);window.commit_history();assert window._dirty
+    window.open_project_path(path);finish_io(app,window)
+    assert window.edit_state()==saved and not window._dirty
+    np.testing.assert_array_equal(window.linear,original_display)
+    assert window.files.item(0).text()=='C:/missing/light.fit'
+    assert window.histogram.bins.sum()>0
+    assert window.undo_action.isEnabled()
+    window.undo_edit();assert window.edit_state()!=saved
+    monkeypatch.setattr(QMessageBox,'question',lambda *args,**kwargs: QMessageBox.Save)
+    window.close();finish_io(app,window);app.processEvents()
+    assert not window.isVisible()
+    from project_store import load_project
+    assert load_project(path)[2]['state']==window.edit_state()

@@ -9,7 +9,7 @@ from app import Window,WheelSlider
 
 def test_crop_edges_and_zoom_keep_source_pixels():
     app=W.QApplication.instance() or W.QApplication([])
-    window=Window();window.show();app.processEvents()
+    window=Window(ask_on_close=False);window.show();app.processEvents()
     data=np.random.default_rng(9).uniform(100,400,(800,1200,3)).astype('float32')
     window.loaded(data,fits.Header({'OBJECT':'C 56'}));app.processEvents()
     assert not hasattr(window,'crop_margins')
