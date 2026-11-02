@@ -4,7 +4,7 @@ import re
 from PySide6 import QtCore, QtNetwork, QtWidgets as W
 from community_links import FEEDBACK_URL
 
-APP_VERSION = '0.13.0'
+from app_version import VERSION as APP_VERSION
 
 
 class FeedbackDialog(W.QDialog):

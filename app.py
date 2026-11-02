@@ -12,6 +12,8 @@ from project_store import EditHistory,validate_state,save_project,load_project
 from histogram import HistogramView,histogram_data
 import community_links
 from feedback import FeedbackDialog
+from app_version import VERSION
+from frame_review import FrameReviewDialog
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 
@@ -61,7 +63,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.source_paths=[]
-        self.setWindowTitle('Easy Astro Studio • Preview 0.13')
+        self.setWindowTitle('Easy Astro Studio • Version '+VERSION)
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
         app = W.QApplication.instance()
@@ -145,6 +147,9 @@ class Window(W.QMainWindow):
         header_row.addWidget(self.header_art)
         brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
         title = W.QLabel('Easy Astro Studio'); title.setWordWrap(True); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
+        byline=W.QLabel('by Astrivanta ©');byline.setAlignment(QtCore.Qt.AlignCenter);byline.setStyleSheet('font-size:12px; color:#b9d5f1');brand.addWidget(byline)
+        brand.setSpacing(3);brand.insertStretch(0);brand.addStretch()
+        title.setSizePolicy(W.QSizePolicy.Preferred,W.QSizePolicy.Maximum);byline.setSizePolicy(W.QSizePolicy.Preferred,W.QSizePolicy.Maximum)
         left_column.addWidget(header)
         self.gpu_panel = W.QFrame(); self.gpu_panel.setObjectName('gpuPanel')
         gpu_row = W.QHBoxLayout(self.gpu_panel); gpu_row.setContentsMargins(12,10,12,10)
@@ -158,17 +163,14 @@ class Window(W.QMainWindow):
         scroll.setMinimumWidth(360); left_column.addWidget(scroll,1)
         self.sidebar_scroll = scroll
         instructions = W.QLabel('Instructions For Use:'); instructions.setStyleSheet('font-weight:bold; font-size:15px'); sidebar.addWidget(instructions)
-        intro = W.QLabel('1. Load or stack\n2. Adjust and crop\n3. Export'); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
+        intro = W.QLabel('1. Set Bayer Pattern then Open existing FITS stack or Multiple FIT files and Stack\n2. Adjust and crop\n3. Export'); intro.setWordWrap(True); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
         outer_sidebar = sidebar
         self.step_load = W.QGroupBox(); self.step_load.setAccessibleName('1. Load or stack'); self.step_load.setObjectName('stepLoad')
         outer_sidebar.addWidget(self.step_load)
         sidebar = W.QVBoxLayout(self.step_load)
         section_title = W.QLabel('1. Load or stack'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
-        load_hint = W.QLabel('Add individual exposures and stack them, or open a stack you already have.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
-        self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
-        self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
-        self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
-        sidebar.addWidget(W.QLabel('Bayer pattern (for 2D files only)'))
+        load_hint = W.QLabel('Add a stack you already have, or add individual exposures and stack and align next.'); load_hint.setWordWrap(True); sidebar.addWidget(load_hint)
+        sidebar.addWidget(W.QLabel('Select Bayer pattern (for 2d files only)'))
         self.bayer = W.QComboBox(); self.bayer.addItems(['Auto', 'RGGB', 'BGGR', 'GRBG', 'GBRG', 'None']); sidebar.addWidget(self.bayer)
         self.bayer_help = W.QLabel(); self.bayer_help.setWordWrap(True)
         self.bayer_help.setStyleSheet('color:#d5e8ff; padding:6px; border:1px solid #365f94;')
@@ -176,8 +178,13 @@ class Window(W.QMainWindow):
         self.bayer.currentTextChanged.connect(self.update_bayer_help)
         self.update_bayer_help()
         note = W.QLabel('The camera sensor and capture software determine the pattern, not the telescope optics. Auto reads BAYERPAT; a missing header produces grayscale. RGB stacks ignore this setting. Do not mix targets, sizes, or exposure settings.'); note.setWordWrap(True); sidebar.addWidget(note)
-        self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
+        self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
+        self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
+        self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
+        self.review=W.QPushButton('Preview / rate exposures…');self.review.clicked.connect(self.review_exposures);sidebar.addWidget(self.review)
+        self.reference_label=W.QLabel('Reference: first exposure in the list');self.reference_label.setWordWrap(True);sidebar.addWidget(self.reference_label)
+        self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
         self.next_adjust = W.QPushButton('Continue to step 2: Adjust and crop →')
         self.next_adjust.setEnabled(False)
@@ -293,8 +300,26 @@ class Window(W.QMainWindow):
         self.planner_banner.linkActivated.connect(self.open_community_link)
         community_layout.addWidget(self.planner_banner)
         root_layout.addWidget(self.community_panel)
+        self.about_action=QtGui.QAction('About',self);self.about_action.triggered.connect(self.show_about)
+        self.menuBar().addAction(self.about_action)
         self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+    def show_about(self):
+        W.QMessageBox.about(self,'About Easy Astro Studio',
+            '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
+            '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>')
+
+    def review_exposures(self):
+        if self.worker is not None or self.project_worker is not None or not self.files.count():return
+        paths=[self.files.item(i).text() for i in range(self.files.count())]
+        selected=self.files.currentItem().text() if self.files.currentItem() else paths[0]
+        dialog=FrameReviewDialog(paths,self.bayer.currentText(),self,selected)
+        if dialog.exec()==W.QDialog.Accepted and dialog.chosen_path in paths:
+            index=paths.index(dialog.chosen_path)
+            item=self.files.takeItem(index);self.files.insertItem(0,item);self.files.setCurrentRow(0)
+            self.log.appendPlainText('Alignment reference selected: '+Path(dialog.chosen_path).name)
+            self.update_actions()
+
     def show_feedback(self):
         dialog=FeedbackDialog(self)
         if dialog.exec()==W.QDialog.Accepted:
@@ -546,6 +571,8 @@ class Window(W.QMainWindow):
     def update_actions(self):
         if not hasattr(self,'undo_action'):return
         busy=self.worker is not None or self.project_worker is not None
+        self.review.setEnabled(not busy and self.files.count()>0)
+        self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
         ready=self.linear is not None and self._history_ready
         pending=ready and self.edit_state()!=self.history.states[self.history.index]
         self.undo_action.setEnabled(ready and not busy and (self.history.can_undo or pending))
@@ -697,6 +724,8 @@ if __name__ == '__main__':
         assert window.coffee_button.isEnabled() and window.feedback_button.isEnabled()
         assert 'https://astrivanta.com/' in window.planner_banner.text()
         feedback=FeedbackDialog(window);assert feedback.send.isEnabled();feedback.close()
+        assert VERSION in window.windowTitle() and window.about_action.text()=='About'
+        review=FrameReviewDialog([], 'Auto',window);review.close()
         assert window.artwork_path.is_file(), 'Bundled header artwork missing'
         assert window.header_art.pixmap() is not None and not window.header_art.pixmap().isNull(), 'Header artwork failed to load'
         sample = np.ones((60, 80, 3), dtype=np.float32)*100
@@ -730,6 +759,22 @@ if __name__ == '__main__':
             restored,restored_header,meta=load_project(project)
             assert np.array_equal(restored,window.original_linear)
             assert meta['state']==window.edit_state()
+            import time
+            review_paths=[]
+            for index in range(2):
+                path=Path(folder)/f'exposure-{index}.fits'
+                fits.writeto(path,sample[...,0],fits.Header({'EXPTIME':20.}))
+                review_paths.append(str(path))
+            review=FrameReviewDialog(review_paths,'None',window);review.show();app.processEvents()
+            def wait_review():
+                deadline=time.monotonic()+20
+                while review.worker is not None and time.monotonic()<deadline:
+                    app.processEvents();time.sleep(.01)
+                assert review.worker is None,'Exposure review timed out'
+            wait_review();assert not review.view.item.pixmap().isNull()
+            review.start_analysis();wait_review();assert len(review.records)==2
+            review.close()
+
         window.close()
         sys.exit(0)
     sys.exit(app.exec())

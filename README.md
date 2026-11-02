@@ -1,8 +1,43 @@
-# Easy Astro Studio — preview 0.13
+# Easy Astro Studio — preview 0.14
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Exposure review, About and workflow (0.14)
+
+About in the top menu shows the full application version. The header includes
+by Astrivanta © in smaller centered text. Instructions and Step 1 now put Bayer
+selection/help first, then Open existing FITS stack, then Add exposures, review,
+and Align and stack, using the requested wording.
+
+After adding individual exposures, click Preview / rate exposures. Select an
+exposure and click Preview selected (or double-click its row). Fit, 100%, mouse
+wheel zoom and right/middle-drag pan help inspect it. The default preview is
+reduced to at most 1600 pixels on its longer side; Full resolution rerenders
+native pixels for focus/star checks. Only one exposure is loaded at a time.
+The current main image, crop and edits are preserved while reviewing.
+
+Analyze all exposures measures detected star count, approximate FWHM and median
+elongation using SEP on a background-subtracted, reduced image. A relative score
+favors sharpness (55%), roundness (25%) and star count (20%). Scores are grouped
+by target metadata, dimensions, exposure time and filter. A frame needs at least
+six reliable detections and another comparable frame to receive a score.
+Select highest score operates within the selected exposure's matching group.
+
+These are advisory comparisons, not calibrated image-quality grades or alignment
+guarantees. Clouds, nebulosity, saturation, hot pixels, sampling and missing
+metadata can mislead the detector. Preview the stars before deciding.
+Use as reference explicitly moves the chosen exposure to the first list position;
+all exposures remain included. Analysis never deletes or automatically rejects
+files and does not change their pixels. Cancel stops between exposures. Closing
+the review safely waits for its current worker to stop.
+
+The reference matters because all other exposures align to it; a sharp frame
+with many well-distributed stars generally makes matching more reliable. Choosing
+a better reference can reduce skips but cannot rescue frames with little shared
+field or poor signal. Raw exposures still need the same target, dimensions and
+exposure settings. The app does not weight stack contributions by these scores.
 
 ## Community buttons and observing banner (0.13)
 
@@ -30,6 +65,8 @@ Plan tonight's observing at https://astrivanta.com/ and opens the default browse
 - Bayer guidance with camera examples and file-orientation cautions.
 
 ## Windows download
+
+The 0.14 installer is being validated. Previous version:
 
 [Download Easy Astro Studio 0.13](https://github.com/KennethRHans/Astrophotography/actions/runs/41518195945/artifacts/13177820196).
 Close the app, extract the ZIP and run
@@ -144,9 +181,11 @@ The header artwork is decorative and does not affect astronomical processing.
 
 ## Validation
 
-All 34 local tests passed, including software OpenCL comparisons for 2–512
+All 37 local tests passed, including software OpenCL comparisons for 2–512
 frames, boundary-sensitive clipping, missing coverage, disk chunk limits,
-GPU failure fallback and project/history/GUI behavior. Ten real S50 Pro exposures
+GPU failure fallback, project/history/GUI behavior and reference review/scoring.
+Synthetic sharp/blurred/trailed/noise-only fields verify the rating direction and
+group separation. The ten real S50 Pro samples also completed quality analysis. Ten real S50 Pro exposures
 passed full-resolution alignment and all 120 GPU combining chunks matched the
 CPU result within floating-point tolerance (maximum absolute difference 0.0078125
 in the source data scale). No source images are included in the download/repo.
