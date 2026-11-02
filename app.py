@@ -10,6 +10,8 @@ import engine
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
 from histogram import HistogramView,histogram_data
+import community_links
+from feedback import FeedbackDialog
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 
@@ -59,7 +61,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.source_paths=[]
-        self.setWindowTitle('Easy Astro Studio • Preview 0.12')
+        self.setWindowTitle('Easy Astro Studio • Preview 0.13')
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
         app = W.QApplication.instance()
@@ -127,7 +129,8 @@ class Window(W.QMainWindow):
         self.worker = None
         self.gpu = None
         root = W.QWidget(); root.setObjectName('appCanvas'); self.setCentralWidget(root)
-        layout = W.QHBoxLayout(root)
+        root_layout = W.QVBoxLayout(root); root_layout.setContentsMargins(10,6,10,6)
+        layout = W.QHBoxLayout(); root_layout.addLayout(layout,1)
         left_column = W.QVBoxLayout(); layout.addLayout(left_column,1)
         header = W.QWidget(); header_row = W.QHBoxLayout(header); header_row.setContentsMargins(0,0,0,0)
         self.header_art = W.QLabel(); self.header_art.setFixedSize(104,104)
@@ -270,8 +273,38 @@ class Window(W.QMainWindow):
         for action in (self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
         file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
+        self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
+        self.community_panel.setStyleSheet('QFrame#communityPanel { background:#0b2545; border:1px solid #3a6c9e; border-radius:6px; }')
+        community_layout = W.QVBoxLayout(self.community_panel); community_layout.setContentsMargins(10,8,10,8); community_layout.setSpacing(8)
+        buttons = W.QHBoxLayout(); buttons.addStretch()
+        self.coffee_button = W.QPushButton('Buy the Developer a Coffee')
+        self.feedback_button = W.QPushButton('Report a Bug / Suggest a Fix')
+        for button in (self.coffee_button,self.feedback_button):
+            button.setMinimumHeight(32);buttons.addWidget(button)
+        self.coffee_button.setToolTip('Open the developer’s Cash App page in your browser')
+        self.coffee_button.clicked.connect(lambda: self.open_community_link(community_links.COFFEE_URL))
+        self.feedback_button.setToolTip('Send a bug report or suggestion to the developer')
+        self.feedback_button.clicked.connect(self.show_feedback)
+        buttons.addStretch(); community_layout.addLayout(buttons)
+        self.planner_banner = W.QLabel('Plan tonight\'s observing at <a style="color:#7bceff; text-decoration:underline" href="https://astrivanta.com/">https://astrivanta.com/</a>')
+        self.planner_banner.setAlignment(QtCore.Qt.AlignCenter); self.planner_banner.setWordWrap(True)
+        self.planner_banner.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+        self.planner_banner.setOpenExternalLinks(False)
+        self.planner_banner.linkActivated.connect(self.open_community_link)
+        community_layout.addWidget(self.planner_banner)
+        root_layout.addWidget(self.community_panel)
         self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+    def show_feedback(self):
+        dialog=FeedbackDialog(self)
+        if dialog.exec()==W.QDialog.Accepted:
+            self.statusBar().showMessage('Thank you! Your feedback was sent.',10000)
+
+    def open_community_link(self, destination):
+        if destination and not QtGui.QDesktopServices.openUrl(QtCore.QUrl(destination)):
+            W.QMessageBox.information(self, 'Could not open link',
+                'Windows could not open this link. You can copy it into your browser or email app:\n\n'+destination)
+
     def zoom_changed(self,scale):
         self.zoom_label.setText(f'{scale*100:.0f}%')
         if hasattr(self,'timer'): self.schedule_preview()
@@ -661,6 +694,9 @@ if __name__ == '__main__':
     window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()
     if '--smoke-test' in sys.argv:
         from astropy.io import fits
+        assert window.coffee_button.isEnabled() and window.feedback_button.isEnabled()
+        assert 'https://astrivanta.com/' in window.planner_banner.text()
+        feedback=FeedbackDialog(window);assert feedback.send.isEnabled();feedback.close()
         assert window.artwork_path.is_file(), 'Bundled header artwork missing'
         assert window.header_art.pixmap() is not None and not window.header_art.pixmap().isNull(), 'Header artwork failed to load'
         sample = np.ones((60, 80, 3), dtype=np.float32)*100

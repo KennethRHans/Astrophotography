@@ -1,8 +1,18 @@
-# Easy Astro Studio — preview 0.12
+# Easy Astro Studio — preview 0.13
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Community buttons and observing banner (0.13)
+
+The fixed dark-blue footer includes Buy the Developer a Coffee (opens
+https://cash.app/$KennethRHans) and Report a Bug / Suggest a Fix. Feedback opens
+an in-app form with report type, optional name/email and a message, submitted
+only when Send is clicked to https://formspree.io/f/xzezdzwd. Success is confirmed
+by the service; errors/timeouts retain the message for retry. No images or logs
+are attached automatically. A clickable banner below the buttons reads
+Plan tonight's observing at https://astrivanta.com/ and opens the default browser.
 
 ## Changes in 0.12
 
@@ -20,6 +30,8 @@ when using the installer. Previously named Astro Studio for Seestar.
 - Bayer guidance with camera examples and file-orientation cautions.
 
 ## Windows download
+
+The 0.13 installer is being validated. Previous version:
 
 [Download Easy Astro Studio 0.12](https://github.com/KennethRHans/Astrophotography/actions/runs/41383581168/artifacts/13114313119).
 Close the app, extract the ZIP and run
@@ -124,7 +136,7 @@ The header artwork is decorative and does not affect astronomical processing.
 
 ## Validation
 
-All 32 local tests passed, including software OpenCL comparisons for 2–512
+All 34 local tests passed, including software OpenCL comparisons for 2–512
 frames, boundary-sensitive clipping, missing coverage, disk chunk limits,
 GPU failure fallback and project/history/GUI behavior. Ten real S50 Pro exposures
 passed full-resolution alignment and all 120 GPU combining chunks matched the
