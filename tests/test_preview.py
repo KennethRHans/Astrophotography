@@ -14,7 +14,7 @@ def test_crop_edges_and_zoom_keep_source_pixels():
     window.loaded(data,fits.Header({'OBJECT':'C 56'}));app.processEvents()
     assert not hasattr(window,'crop_margins')
     window.select_crop(300,200,900,600)
-    window.preview.set_zoom(1);window.preview.centerOn(600,400);app.processEvents()
+    window.preview.set_zoom(1);window.preview.centerOn(850,400);app.processEvents()
     view=window.preview
     start=view.mapFromScene(QtCore.QPointF(900,400));end=view.mapFromScene(QtCore.QPointF(850,400))
     assert view.viewport().rect().contains(start)
