@@ -1,5 +1,25 @@
 name: Windows package
-on: [push, workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Partner Center Package/Identity/Name (blank builds development identity)'
+        required: false
+        type: string
+      publisher:
+        description: 'Partner Center Package/Identity/Publisher (CN=...)'
+        required: false
+        type: string
+      publisher_display_name:
+        description: 'Partner Center Package/Properties/PublisherDisplayName'
+        required: false
+        type: string
+      display_name:
+        description: 'Reserved Store display name'
+        required: false
+        default: 'Easy Astro Studio'
+        type: string
 permissions:
   contents: read
   actions: read
@@ -22,13 +42,40 @@ jobs:
           $process = Start-Process -FilePath dist/EasyAstroStudio/EasyAstroStudio.exe -ArgumentList '--smoke-test' -PassThru
           if (-not $process.WaitForExit(120000)) { $process.Kill(); throw "Packaged GUI timed out" }
           if ($process.ExitCode -ne 0) { throw "Packaged GUI smoke test failed: $($process.ExitCode)" }
+      - name: Build and validate development MSIX
+        shell: pwsh
+        run: ./Build-MSIX.ps1 -TestIdentity
+      - name: Install and activate MSIX with real package identity
+        shell: pwsh
+        run: ./scripts/Test-MSIX.ps1
+      - name: Build Store submission candidate with supplied identity
+        if: github.event_name == 'workflow_dispatch' && inputs.package_name != ''
+        shell: pwsh
+        env:
+          STORE_NAME: ${{ inputs.package_name }}
+          STORE_PUBLISHER: ${{ inputs.publisher }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ inputs.publisher_display_name }}
+          STORE_DISPLAY_NAME: ${{ inputs.display_name }}
+        run: |
+          @{name=$env:STORE_NAME;publisher=$env:STORE_PUBLISHER;publisher_display_name=$env:STORE_PUBLISHER_DISPLAY_NAME;display_name=$env:STORE_DISPLAY_NAME} | ConvertTo-Json | Set-Content store/identity.local.json
+          ./Build-MSIX.ps1 -IdentityFile store/identity.local.json
+      - name: Upload MSIX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-MSIX
+          path: |
+            msix-artifacts/
+            store/*.md
+            store/identity.example.json
+            Build-MSIX.ps1
+          if-no-files-found: error
       - name: Build installer
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - name: Verify Program Files install and desktop shortcut
         shell: pwsh
         run: |
-          $setup = Start-Process -FilePath installer/EasyAstroStudio-0.16.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $setup = Start-Process -FilePath installer/EasyAstroStudio-1.0.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           $installed = Join-Path $env:ProgramFiles 'Easy Astro Studio/EasyAstroStudio.exe'
           if (-not (Test-Path $installed)) { throw 'Application missing from native Program Files' }
@@ -55,7 +102,7 @@ jobs:
           $oldFolder = Join-Path $env:ProgramFiles 'Astro Studio for Seestar'
           $sentinel = Join-Path $oldFolder 'user-image-preservation.txt'
           Set-Content -LiteralPath $sentinel -Value 'Preserve user-created files during rename upgrade'
-          $upgrade = Start-Process -FilePath installer/EasyAstroStudio-0.16.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $upgrade = Start-Process -FilePath installer/EasyAstroStudio-1.0.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw 'Rename upgrade failed' }
           $exe = Join-Path $oldFolder 'EasyAstroStudio.exe'
           if (-not (Test-Path $exe)) { throw 'Renamed app missing from previous install directory' }

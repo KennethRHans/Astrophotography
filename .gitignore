@@ -10,3 +10,10 @@ installer/
 *.zip
 
 *.astro
+
+msix-artifacts/
+*.pfx
+*.p12
+*.cer
+*.msix
+store/identity.local.json

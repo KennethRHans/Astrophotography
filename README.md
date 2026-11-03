@@ -1,8 +1,26 @@
-# Easy Astro Studio — preview 0.16
+# Easy Astro Studio — 1.0 Microsoft Store preparation
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Microsoft Store preparation (1.0)
+
+The app now has a native x64 MSIX build path using MakeAppx/MakePRI and the
+existing approved logo for Windows icons. It retains full-trust desktop file
+and OpenCL access without requesting administrator elevation. Package-aware
+launch keeps the Store-assigned taskbar identity; the separate EXE build keeps
+its existing identity. Version 1.0.0 maps to Store package version 1.0.0.0.
+
+See [Store submission guide](store/SUBMISSION-GUIDE.md),
+[listing draft](store/LISTING-DRAFT.md) and
+[privacy draft for owner review](store/PRIVACY-DRAFT.md).
+The build cannot produce a real-identity submission candidate until Partner
+Center identity values are supplied. Default builds use an explicitly separate
+development identity and must not be submitted to the Store. CI installs and
+activates a disposable test-signed copy; the downloadable MSIX remains unsigned
+for Store processing. Nothing has been submitted or published to the Store.
+Windows package validation is in progress for this preparation build.
 
 ## Themes and planner link (0.16)
 

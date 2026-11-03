@@ -682,15 +682,16 @@ class Window(W.QMainWindow):
         event.accept()
 
 if __name__ == '__main__':
-    if sys.platform == 'win32':
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('EasyAstroStudio.Desktop')
+    from windows_identity import configure_taskbar_identity,has_package_identity
+    configure_taskbar_identity()
     app = W.QApplication(sys.argv)
     app.setApplicationName('Easy Astro Studio')
     app.setApplicationDisplayName('Easy Astro Studio')
     app.setStyle('Fusion')
     window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()
     if '--smoke-test' in sys.argv:
+        if '--smoke-write-theme' in sys.argv:window.set_theme(sys.argv[sys.argv.index('--smoke-write-theme')+1])
+        if '--smoke-expect-theme' in sys.argv:assert window.theme_name==sys.argv[sys.argv.index('--smoke-expect-theme')+1]
         from astropy.io import fits
         assert window.coffee_button.isEnabled() and window.feedback_button.isEnabled()
         assert 'https://planner.astrivanta.com' in window.planner_banner.text()
@@ -701,6 +702,10 @@ if __name__ == '__main__':
         assert window.header_art.pixmap() is not None and not window.header_art.pixmap().isNull(), 'Header artwork failed to load'
         sample = np.ones((60, 80, 3), dtype=np.float32)*100
         sample[20:30, 20:30] = 500
+        from stack_store import AlignedFrames,combine
+        with AlignedFrames(sample.shape) as frames:
+            frames.append(sample);frames.append(sample)
+            assert np.array_equal(combine(frames),sample)
         window.loaded(sample, fits.Header())
         window.sliders['Background correction %'].setValue(50)
         window.reset.click()
@@ -746,6 +751,10 @@ if __name__ == '__main__':
             review.start_analysis();wait_review();assert len(review.records)==2
             review.close()
 
+        if '--require-package-identity' in sys.argv:assert has_package_identity(),'Expected MSIX package identity'
+        if '--smoke-result' in sys.argv:
+            destination=Path(sys.argv[sys.argv.index('--smoke-result')+1])
+            destination.write_text(json.dumps(dict(ok=True,version=VERSION,package_identity=has_package_identity())),encoding='utf-8')
         window.close()
         sys.exit(0)
     sys.exit(app.exec())

@@ -1,7 +1,7 @@
 [Setup]
 AppId=Seestar Studio Preview
 AppName=Easy Astro Studio
-AppVersion=0.16.0
+AppVersion=1.0.0
 DefaultDirName={autopf}\Easy Astro Studio
 UsePreviousAppDir=yes
 DefaultGroupName=Easy Astro Studio
@@ -11,7 +11,7 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=installer
-OutputBaseFilename=EasyAstroStudio-0.16.0-Setup
+OutputBaseFilename=EasyAstroStudio-1.0.0-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
