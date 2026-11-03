@@ -15,11 +15,14 @@ its existing identity. Version 1.0.0 maps to Store package version 1.0.0.0.
 See [Store submission guide](store/SUBMISSION-GUIDE.md),
 [listing draft](store/LISTING-DRAFT.md) and
 [privacy draft for owner review](store/PRIVACY-DRAFT.md).
-The build cannot produce a real-identity submission candidate until Partner
-Center identity values are supplied. Default builds use an explicitly separate
-development identity and must not be submitted to the Store. CI installs and
-activates a disposable test-signed copy; the downloadable MSIX remains unsigned
-for Store processing. Nothing has been submitted or published to the Store.
+The provided Partner Center identity is configured in store/identity.json:
+Astrivanta.EasyAstroStudio, publisher
+CN=D1BC40AB-66EF-44E8-9901-3DF6CBECAF25, publisher display name Astrivanta.
+CI builds the Store candidate using that identity, verifies the actual archive
+and separately tests a disposable signed copy under the exact package identity.
+The Store-Upload artifact contains only the original unsigned submission
+candidate and validation reports. Development test packages remain separate.
+Nothing has been submitted or published to the Store.
 All 41 local tests passed. Windows tests, MakePRI/MakeAppx validation, actual
 MSIX installation, package-identity activation, CPU combining, FITS/project/JPEG
 checks and theme persistence across two installed launches passed. The test
@@ -32,8 +35,8 @@ Store certification, Windows App Certification Kit results or a physical Windows
 It contains a development-identity unsigned package and submission drafts, not a
 public installer or a package ready to upload under your Store account. Use the
 source checkout on this branch for building; the kit alone is not a full source
-distribution. Supply the real Partner Center identity before generating the
-Store submission candidate. Review and publish the privacy policy and complete
+distribution. The provided identity is now configured for the separate Store upload build.
+Review and publish the privacy policy and complete
 the remaining listing/certification steps in the guide. Nothing is live yet.
 
 ## Themes and planner link (0.16)

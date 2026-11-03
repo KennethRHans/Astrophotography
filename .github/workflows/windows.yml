@@ -49,7 +49,6 @@ jobs:
         shell: pwsh
         run: ./scripts/Test-MSIX.ps1
       - name: Build Store submission candidate with supplied identity
-        if: github.event_name == 'workflow_dispatch' && inputs.package_name != ''
         shell: pwsh
         env:
           STORE_NAME: ${{ inputs.package_name }}
@@ -57,8 +56,24 @@ jobs:
           STORE_PUBLISHER_DISPLAY_NAME: ${{ inputs.publisher_display_name }}
           STORE_DISPLAY_NAME: ${{ inputs.display_name }}
         run: |
-          @{name=$env:STORE_NAME;publisher=$env:STORE_PUBLISHER;publisher_display_name=$env:STORE_PUBLISHER_DISPLAY_NAME;display_name=$env:STORE_DISPLAY_NAME} | ConvertTo-Json | Set-Content store/identity.local.json
-          ./Build-MSIX.ps1 -IdentityFile store/identity.local.json
+          $identity = 'store/identity.json'
+          if ($env:STORE_NAME) {
+            @{name=$env:STORE_NAME;publisher=$env:STORE_PUBLISHER;publisher_display_name=$env:STORE_PUBLISHER_DISPLAY_NAME;display_name=$env:STORE_DISPLAY_NAME} | ConvertTo-Json | Set-Content store/identity.local.json
+            $identity = 'store/identity.local.json'
+          }
+          ./Build-MSIX.ps1 -IdentityFile $identity
+          $package = Get-ChildItem msix-artifacts/submission/*.msix | Select-Object -First 1
+          python scripts/verify_msix.py $package.FullName --identity $identity --report msix-artifacts/submission/StorePackageValidation.json
+          if ($LASTEXITCODE -ne 0) { throw 'Store archive identity verification failed' }
+      - name: Install and activate exact Store identity
+        shell: pwsh
+        run: ./scripts/Test-MSIX.ps1 -Purpose submission
+      - name: Upload Store upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-Store-Upload
+          path: msix-artifacts/submission/
+          if-no-files-found: error
       - name: Upload MSIX artifacts
         uses: actions/upload-artifact@v4
         with:

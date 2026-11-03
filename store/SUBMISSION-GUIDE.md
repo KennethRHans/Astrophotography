@@ -15,13 +15,15 @@ management > Product identity, copy these exact, case-sensitive public values:
 - Package/Properties/PublisherDisplayName -> `publisher_display_name`
 - Reserved app display name -> `display_name`
 
-Copy identity.example.json to identity.local.json and fill in those values.
+The supplied Astrivanta identity is saved in identity.json. For this app, use
+that file directly. To build for a different product, copy identity.example.json
+to identity.local.json and fill in its assigned values.
 That local file is ignored by Git. These values are public identifiers, not secrets.
 
 After building dist/EasyAstroStudio with Build-Windows.cmd, run:
 
 ```powershell
-./Build-MSIX.ps1 -IdentityFile store/identity.local.json -Python .venv/Scripts/python.exe
+./Build-MSIX.ps1 -IdentityFile store/identity.json -Python .venv/Scripts/python.exe
 ```
 
 Install the Windows 10/11 SDK to provide MakeAppx and MakePRI. Production output
@@ -31,9 +33,12 @@ certificate is not required for this route. The unsigned candidate is intended
 for Partner Center upload, not ordinary double-click installation.
 
 Alternatively, run the Windows package workflow manually and enter all four
-public identity values in the workflow inputs. The workflow always builds/tests
-a separate development identity and builds the submission candidate only when
-real identity values are supplied.
+public identity values in the workflow inputs. The workflow builds/tests a separate development identity and also builds the
+submission candidate using the supplied inputs or the saved store/identity.json.
+The EasyAstroStudio-Store-Upload artifact contains only the Store candidate and
+its identity/hash/runtime validation reports. Extract the ZIP and upload the
+*-Store-UNSIGNED.msix file to Partner Center Packages, rather than uploading the
+ZIP, JSON reports or a Development MSIX file.
 
 ## Development output and automated validation
 

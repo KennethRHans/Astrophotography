@@ -1,9 +1,10 @@
 # CI-only test: the certificate and package registration are removed afterwards.
+param([ValidateSet('development','submission')][string]$Purpose = 'development')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$package = Get-ChildItem 'msix-artifacts/development/*.msix' | Select-Object -First 1
+$package = Get-ChildItem "msix-artifacts/$Purpose/*.msix" | Select-Object -First 1
 if (-not $package) { throw 'Build the development MSIX first' }
-$info = Get-Content 'msix-artifacts/development/BuildInfo.json' -Raw | ConvertFrom-Json
+$info = Get-Content "msix-artifacts/$Purpose/BuildInfo.json" -Raw | ConvertFrom-Json
 $tool = Get-ChildItem "${env:ProgramFiles(x86)}/Windows Kits/10/bin/*/x64/signtool.exe" | Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
 if (-not $tool) { throw 'Windows SDK SignTool missing' }
 $local = Join-Path (Get-Location) 'build/msix-local-test'
@@ -61,7 +62,7 @@ public static class StoreTestLauncher {
         $running = Get-Process -Id $processId -ErrorAction SilentlyContinue
         if ($running -and -not $running.WaitForExit(30000)) { $running.Kill(); throw 'MSIX test app did not exit' }
     }
-    @{ status='passed'; installation=$true; package_identity=$true; processing_project_export=$true; settings_persisted=$true; gpu_hardware_tested=$false } | ConvertTo-Json | Set-Content 'msix-artifacts/development/RuntimeValidation.json'
+    @{ status='passed'; installation=$true; package_identity=$true; processing_project_export=$true; settings_persisted=$true; gpu_hardware_tested=$false } | ConvertTo-Json | Set-Content "msix-artifacts/$Purpose/RuntimeValidation.json"
 } finally {
     if ($registered) { Remove-AppxPackage -Package $registered.PackageFullName -ErrorAction Continue }
     if ($certificate) {

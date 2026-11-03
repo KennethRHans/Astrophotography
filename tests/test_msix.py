@@ -35,3 +35,26 @@ def test_store_icons_and_stage_preserve_payload(tmp_path,monkeypatch):
     for name,size in [('StoreLogo',50),('Logo44',44),('Logo150',150)]:
         image=QImage(str(output/'Assets'/(name+'.png')));assert image.width()==size and image.height()==size
     with pytest.raises(ValueError):msix.stage(payload,output,msix.TEST_IDENTITY,test=True)
+
+
+def test_upload_archive_matches_astrivanta_identity_and_rejects_mismatch(tmp_path,monkeypatch):
+    import json,zipfile
+    scripts=Path(__file__).resolve().parents[1]/'scripts'
+    monkeypatch.syspath_prepend(str(scripts))
+    import verify_msix
+    identity=json.loads((scripts.parent/'store'/'identity.json').read_text())
+    assert identity['name']=='Astrivanta.EasyAstroStudio'
+    assert identity['publisher']=='CN=D1BC40AB-66EF-44E8-9901-3DF6CBECAF25'
+    assert identity['publisher_display_name']=='Astrivanta'
+    path=tmp_path/'store.msix'
+    def package(publisher=None):
+        data=dict(identity)
+        if publisher:data['publisher']=publisher
+        with zipfile.ZipFile(path,'w') as archive:
+            archive.writestr('AppxManifest.xml',ET.tostring(msix.manifest(data).getroot()))
+            archive.writestr('App/EasyAstroStudio.exe',b'test executable')
+            archive.writestr('BuildInfo.json',json.dumps(dict(identity=identity,purpose='Store submission candidate; certification pending')))
+    package();report=verify_msix.verify(path,identity)
+    assert report['status']=='passed' and len(report['sha256'])==64 and not report['signed']
+    package('CN=WrongPublisher')
+    with pytest.raises(ValueError,match='Publisher'):verify_msix.verify(path,identity)
