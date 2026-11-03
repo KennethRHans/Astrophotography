@@ -23,6 +23,18 @@ and separately tests a disposable signed copy under the exact package identity.
 The Store-Upload artifact contains only the original unsigned submission
 candidate and validation reports. Development test packages remain separate.
 Nothing has been submitted or published to the Store.
+
+[Download the Store upload package](https://github.com/KennethRHans/Astrophotography/actions/runs/41717811587/artifacts/13270319227).
+Extract the ZIP and upload `EasyAstroStudio-1.0.0-x64-Store-UNSIGNED.msix` in
+Partner Center > Packages. This artifact contains no development package.
+The archive's Name, Publisher, PublisherDisplayName, display name, x64
+architecture and 1.0.0.0 version were verified against store/identity.json.
+The exact Store identity also passed installed activation, local processing,
+project/export and saved-theme checks using a disposable CI-signed copy. The
+original upload candidate is unsigned for Microsoft Store signing. All 42 local
+tests passed. Store listing/privacy completion and Microsoft certification are
+still pending; a validated upload is not a published release.
+
 All 41 local tests passed. Windows tests, MakePRI/MakeAppx validation, actual
 MSIX installation, package-identity activation, CPU combining, FITS/project/JPEG
 checks and theme persistence across two installed launches passed. The test
