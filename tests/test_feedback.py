@@ -52,7 +52,7 @@ def test_timeout_preserves_message_and_footer_links(monkeypatch):
     monkeypatch.setattr(QtGui.QDesktopServices,'openUrl',lambda url: opened.append(url.toString()) or True)
     window.coffee_button.click()
     window.planner_banner.linkActivated.emit(community_links.PLANNER_URL)
-    assert opened==['https://cash.app/$KennethRHans','https://astrivanta.com/']
+    assert opened==['https://cash.app/$KennethRHans','https://planner.astrivanta.com']
     feedback=[];monkeypatch.setattr(FeedbackDialog,'exec',lambda self: feedback.append(self.windowTitle()) or W.QDialog.Rejected)
     window.feedback_button.click();assert feedback==['Report a Bug / Suggest a Fix']
     window.close()

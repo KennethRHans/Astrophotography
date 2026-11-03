@@ -1,8 +1,21 @@
-# Easy Astro Studio — preview 0.15
+# Easy Astro Studio — preview 0.16
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Themes and planner link (0.16)
+
+Settings > Theme offers Dark (the existing black/blue default), Light,
+Midnight Purple, Forest Green, Slate and Warm Copper. Changes apply immediately
+to the app, menus and dialogs and are remembered per Windows user across
+restarts/upgrades. Invalid saved theme names fall back to Dark. Theme selection
+is an application preference, separate from .astro projects and undo history.
+
+The astronomical image/preview stays on black for consistent viewing, and
+changing a theme does not change image pixels or adjustment settings.
+The footer now opens https://planner.astrivanta.com and displays that address.
+Donation and feedback destinations remain the same.
 
 ## Five-step workflow and sortable review (0.15)
 
@@ -74,7 +87,7 @@ an in-app form with report type, optional name/email and a message, submitted
 only when Send is clicked to https://formspree.io/f/xzezdzwd. Success is confirmed
 by the service; errors/timeouts retain the message for retry. No images or logs
 are attached automatically. A clickable banner below the buttons reads
-Plan tonight's observing at https://astrivanta.com/ and opens the default browser.
+Plan tonight's observing at https://planner.astrivanta.com and opens the default browser.
 
 ## Changes in 0.12
 
@@ -92,6 +105,8 @@ Plan tonight's observing at https://astrivanta.com/ and opens the default browse
 - Bayer guidance with camera examples and file-orientation cautions.
 
 ## Windows download
+
+The 0.16 installer is being validated. Previous version:
 
 [Download Easy Astro Studio 0.15](https://github.com/KennethRHans/Astrophotography/actions/runs/41545469531/artifacts/13188367688).
 Close the app, extract the ZIP and run
@@ -228,7 +243,7 @@ The header artwork is decorative and does not affect astronomical processing.
 
 ## Validation
 
-All 38 local tests passed, including software OpenCL comparisons for 2–512
+All 39 local tests passed, including software OpenCL comparisons for 2–512
 frames, boundary-sensitive clipping, missing coverage, disk chunk limits,
 GPU failure fallback, project/history/GUI behavior and reference review/scoring.
 Synthetic sharp/blurred/trailed/noise-only fields verify the rating direction and

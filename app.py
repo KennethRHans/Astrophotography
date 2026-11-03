@@ -13,6 +13,7 @@ from histogram import HistogramView,histogram_data
 import community_links
 from feedback import FeedbackDialog
 from app_version import VERSION
+from themes import THEMES,apply_theme
 from frame_review import FrameReviewDialog
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
@@ -56,7 +57,7 @@ class ProjectWorker(QtCore.QThread):
 
 
 class Window(W.QMainWindow):
-    def __init__(self,ask_on_close=True):
+    def __init__(self,ask_on_close=True,settings=None):
         super().__init__()
         self.ask_on_close=ask_on_close
         self.history=EditHistory()
@@ -66,66 +67,8 @@ class Window(W.QMainWindow):
         self.setWindowTitle('Easy Astro Studio • Version '+VERSION)
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
-        app = W.QApplication.instance()
-        palette = QtGui.QPalette()
-        for role,color in [(QtGui.QPalette.Window,'#000000'),(QtGui.QPalette.WindowText,'#f1f6fd'),
-                           (QtGui.QPalette.Base,'#071321'),(QtGui.QPalette.AlternateBase,'#102640'),
-                           (QtGui.QPalette.Text,'#f1f6fd'),(QtGui.QPalette.Button,'#123252'),
-                           (QtGui.QPalette.ButtonText,'#f1f6fd'),(QtGui.QPalette.Highlight,'#247eb6'),
-                           (QtGui.QPalette.HighlightedText,'#ffffff'),(QtGui.QPalette.ToolTipBase,'#102640'),
-                           (QtGui.QPalette.ToolTipText,'#ffffff'),(QtGui.QPalette.Link,'#7bceff'),(QtGui.QPalette.Mid,'#789ab7'),
-                           (QtGui.QPalette.Light,'#a2c4e3'),(QtGui.QPalette.Dark,'#3c5878')]:
-            palette.setColor(role,QtGui.QColor(color))
-        for role in (QtGui.QPalette.WindowText,QtGui.QPalette.Text,QtGui.QPalette.ButtonText):
-            palette.setColor(QtGui.QPalette.Disabled,role,QtGui.QColor('#91a5bf'))
-        app.setPalette(palette)
-        self.setStyleSheet("""
-            QMainWindow, QWidget#appCanvas, QWidget#controlPanel, QScrollArea { background: #000000; color: #f1f6fd; }
-            QScrollArea { border: none; }
-            QToolBar { background: #000000; border-bottom: 1px solid #3a6c9e; spacing: 6px; }
-            QFrame#histogramPanel { background: #0b2545; border: 1px solid #3a6c9e; border-radius: 5px; }
-            QGroupBox#stepEquipment, QGroupBox#stepLoad, QGroupBox#stepStack, QGroupBox#stepAdjust, QGroupBox#stepExport {
-                border: 2px solid #3a6c9e; border-radius: 8px;
-                margin-top: 4px; padding-top: 4px; background: #0b2545;
-            }
-            QLabel#sectionTitle {
-                color: #ffffff; font-size: 20px; font-weight: bold;
-                background: #12395e; border: 1px solid #74b9e9;
-                border-radius: 5px; padding: 8px 10px; margin-bottom: 6px;
-            }
-            QLabel#sectionTitle:disabled { color: #c3d5e9; background: #102b49; border-color: #466888; }
-            QFrame#gpuPanel { background: #0b2545; border: 2px solid #3a6c9e; border-radius: 8px; }
-            QCheckBox#gpuSwitch::indicator { width: 20px; height: 20px; }
-            QFrame#previewPanel { background: #000000; border: 2px solid #3a6c9e; border-radius: 8px; }
-            QLabel#sliderValue { color: #def2ff; font-weight: bold; }
-            QCheckBox#gpuSwitch { background: transparent; color: #f1f6fd; font-size: 12px; }
-            QGroupBox { color: #f1f6fd; }
-            QLabel { color: #f1f6fd; background: transparent; }
-            QLabel:disabled { color: #91a5bf; }
-            QCheckBox { color: #f1f6fd; spacing: 7px; }
-            QCheckBox:disabled { color: #91a5bf; }
-            QPushButton, QToolButton {
-                background: #123252; color: #f1f6fd; border: 1px solid #476b95;
-                border-radius: 4px; padding: 5px 8px;
-            }
-            QPushButton:hover, QToolButton:hover { background: #1b466d; border-color: #74c8ff; }
-            QPushButton:pressed, QToolButton:pressed { background: #235a86; }
-            QPushButton:disabled, QToolButton:disabled { background: #0a192b; color: #91a5bf; border-color: #28415f; }
-            QComboBox, QSpinBox, QLineEdit, QListWidget, QPlainTextEdit {
-                background: #071321; color: #f1f6fd; border: 1px solid #3a5e86;
-                border-radius: 3px; padding: 3px; selection-background-color: #247eb6;
-                selection-color: #ffffff;
-            }
-            QComboBox QAbstractItemView { background: #102640; color: #f1f6fd; selection-background-color: #247eb6; }
-            QProgressBar { background: #071321; color: #ffffff; border: 1px solid #3a5e86; border-radius: 3px; text-align: center; }
-            QProgressBar::chunk { background: #247eb6; }
-            QSlider::groove:horizontal { height: 8px; background: #254668; border-radius: 4px; }
-            QSlider::sub-page:horizontal { background: #379cc3; border-radius: 4px; }
-            QSlider::handle:horizontal { width: 24px; margin: -8px 0; background: #def2ff;
-                border: 2px solid #5ec9ff; border-radius: 8px; }
-            QSlider::handle:horizontal:hover { background: #91d6ff; }
-            QSlider::handle:horizontal:pressed { background: #57bbef; }
-        """)
+        self.settings_store=settings if settings is not None else QtCore.QSettings('Astrivanta','EasyAstroStudio')
+        self.theme_name=apply_theme(W.QApplication.instance(),self.settings_store.value('appearance/theme','Dark'))
         self.source_name = 'image' 
         self.linear = self.header = self.rendered = None
         self.worker = None
@@ -147,7 +90,7 @@ class Window(W.QMainWindow):
         header_row.addWidget(self.header_art)
         brand = W.QVBoxLayout(); header_row.addLayout(brand,1)
         title = W.QLabel('Easy Astro Studio'); title.setWordWrap(True); title.setStyleSheet('font-size:24px; font-weight:bold'); brand.addWidget(title)
-        byline=W.QLabel('by Astrivanta ©');byline.setAlignment(QtCore.Qt.AlignCenter);byline.setStyleSheet('font-size:12px; color:#b9d5f1');brand.addWidget(byline)
+        byline=W.QLabel('by Astrivanta ©');byline.setAlignment(QtCore.Qt.AlignCenter);byline.setObjectName('byline');brand.addWidget(byline)
         brand.setSpacing(3);brand.insertStretch(0);brand.addStretch()
         title.setSizePolicy(W.QSizePolicy.Preferred,W.QSizePolicy.Maximum);byline.setSizePolicy(W.QSizePolicy.Preferred,W.QSizePolicy.Maximum)
         left_column.addWidget(header)
@@ -171,7 +114,7 @@ class Window(W.QMainWindow):
         sidebar.addWidget(W.QLabel('Select Bayer pattern (for 2d files only)'))
         self.bayer = W.QComboBox(); self.bayer.addItems(['Auto', 'RGGB', 'BGGR', 'GRBG', 'GBRG', 'None']); sidebar.addWidget(self.bayer)
         self.bayer_help = W.QLabel(); self.bayer_help.setWordWrap(True)
-        self.bayer_help.setStyleSheet('color:#d5e8ff; padding:6px; border:1px solid #365f94;')
+        self.bayer_help.setObjectName('bayerHelp')
         sidebar.addWidget(self.bayer_help)
         self.bayer.currentTextChanged.connect(self.update_bayer_help)
         self.update_bayer_help()
@@ -183,7 +126,7 @@ class Window(W.QMainWindow):
         section_title=W.QLabel('2. Load FITS Stack or Multiple Files to Stack');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
         load_hint=W.QLabel('Open an existing stack and continue to step 4, or add individual exposures for step 3.');load_hint.setWordWrap(True);sidebar.addWidget(load_hint)
         self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
-        or_label=W.QLabel('OR');or_label.setAlignment(QtCore.Qt.AlignCenter);or_label.setStyleSheet('font-weight:bold; color:#def2ff');sidebar.addWidget(or_label)
+        or_label=W.QLabel('OR');or_label.setAlignment(QtCore.Qt.AlignCenter);or_label.setStyleSheet('font-weight:bold');sidebar.addWidget(or_label)
         self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
         self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
         self.remove = W.QPushButton('Remove selected'); self.remove.clicked.connect(self.remove_files); sidebar.addWidget(self.remove)
@@ -292,7 +235,6 @@ class Window(W.QMainWindow):
         file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
-        self.community_panel.setStyleSheet('QFrame#communityPanel { background:#000000; border:1px solid #3a6c9e; border-radius:6px; }')
         community_layout = W.QVBoxLayout(self.community_panel); community_layout.setContentsMargins(10,8,10,8); community_layout.setSpacing(8)
         buttons = W.QHBoxLayout(); buttons.addStretch()
         self.coffee_button = W.QPushButton('Buy the Developer a Coffee')
@@ -304,17 +246,33 @@ class Window(W.QMainWindow):
         self.feedback_button.setToolTip('Send a bug report or suggestion to the developer')
         self.feedback_button.clicked.connect(self.show_feedback)
         buttons.addStretch(); community_layout.addLayout(buttons)
-        self.planner_banner = W.QLabel('Plan tonight\'s observing at <a style="color:#7bceff; text-decoration:underline" href="https://astrivanta.com/">https://astrivanta.com/</a>')
+        self.planner_banner = W.QLabel();self.update_planner_banner()
         self.planner_banner.setAlignment(QtCore.Qt.AlignCenter); self.planner_banner.setWordWrap(True)
         self.planner_banner.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
         self.planner_banner.setOpenExternalLinks(False)
         self.planner_banner.linkActivated.connect(self.open_community_link)
         community_layout.addWidget(self.planner_banner)
         root_layout.addWidget(self.community_panel)
+        settings_menu=self.menuBar().addMenu('Settings');theme_menu=settings_menu.addMenu('Theme')
+        self.theme_actions={};self.theme_group=QtGui.QActionGroup(self);self.theme_group.setExclusive(True)
+        for name in THEMES:
+            action=QtGui.QAction(name,self);action.setCheckable(True);action.setChecked(name==self.theme_name)
+            action.triggered.connect(lambda checked=False,choice=name:self.set_theme(choice))
+            self.theme_group.addAction(action);theme_menu.addAction(action);self.theme_actions[name]=action
         self.about_action=QtGui.QAction('About',self);self.about_action.triggered.connect(self.show_about)
         self.menuBar().addAction(self.about_action)
         self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+    def update_planner_banner(self):
+        color=THEMES[self.theme_name]['link'];url=community_links.PLANNER_URL
+        self.planner_banner.setText(f'Plan tonight\'s observing at <a style="color:{color}; text-decoration:underline" href="{url}">{url}</a>')
+
+    def set_theme(self,name):
+        self.theme_name=apply_theme(W.QApplication.instance(),name)
+        self.settings_store.setValue('appearance/theme',self.theme_name);self.settings_store.sync()
+        self.theme_actions[self.theme_name].setChecked(True);self.update_planner_banner()
+        if hasattr(self,'_clipping_warning'):self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
+
     def show_about(self):
         W.QMessageBox.about(self,'About Easy Astro Studio',
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
@@ -540,7 +498,8 @@ class Window(W.QMainWindow):
         bins,black,white=histogram_data(preview,valid)
         self.histogram.set_data(bins)
         self.clip_summary.setText(f'Black clipping: {black:.3f}% • White clipping: {white:.3f}% (preview)')
-        self.clip_summary.setStyleSheet('color: #ffce7a;' if max(black,white)>.1 else 'color: #c3d9ef;')
+        self._clipping_warning=max(black,white)>.1
+        self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
         pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
         if self.mark_clipping.isChecked():
             pixels[np.any(preview<=0,axis=-1)&valid]=(45,105,255)
@@ -734,7 +693,7 @@ if __name__ == '__main__':
     if '--smoke-test' in sys.argv:
         from astropy.io import fits
         assert window.coffee_button.isEnabled() and window.feedback_button.isEnabled()
-        assert 'https://astrivanta.com/' in window.planner_banner.text()
+        assert 'https://planner.astrivanta.com' in window.planner_banner.text()
         feedback=FeedbackDialog(window);assert feedback.send.isEnabled();feedback.close()
         assert VERSION in window.windowTitle() and window.about_action.text()=='About'
         review=FrameReviewDialog([], 'Auto',window);review.close()
