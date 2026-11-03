@@ -20,7 +20,21 @@ Center identity values are supplied. Default builds use an explicitly separate
 development identity and must not be submitted to the Store. CI installs and
 activates a disposable test-signed copy; the downloadable MSIX remains unsigned
 for Store processing. Nothing has been submitted or published to the Store.
-Windows package validation is in progress for this preparation build.
+All 41 local tests passed. Windows tests, MakePRI/MakeAppx validation, actual
+MSIX installation, package-identity activation, CPU combining, FITS/project/JPEG
+checks and theme persistence across two installed launches passed. The test
+certificate and package registration were removed afterwards. Legacy installer
+installation/shortcut/upgrade checks also passed. This does not replace Microsoft
+Store certification, Windows App Certification Kit results or a physical Windows
+11/OpenCL GPU test.
+
+[Download the MSIX preparation kit](https://github.com/KennethRHans/Astrophotography/actions/runs/41711291933/artifacts/13267949775).
+It contains a development-identity unsigned package and submission drafts, not a
+public installer or a package ready to upload under your Store account. Use the
+source checkout on this branch for building; the kit alone is not a full source
+distribution. Supply the real Partner Center identity before generating the
+Store submission candidate. Review and publish the privacy policy and complete
+the remaining listing/certification steps in the guide. Nothing is live yet.
 
 ## Themes and planner link (0.16)
 
