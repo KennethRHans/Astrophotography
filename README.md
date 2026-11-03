@@ -106,7 +106,17 @@ Plan tonight's observing at https://planner.astrivanta.com and opens the default
 
 ## Windows download
 
-The 0.16 installer is being validated. Previous version:
+[Download Easy Astro Studio 0.16](https://github.com/KennethRHans/Astrophotography/actions/runs/41676523870/artifacts/13250841921).
+Close the app, extract the ZIP and run
+`installer/EasyAstroStudio-0.16.0-Setup.exe`.
+Use Settings > Theme to select and save an appearance. All 39 local tests passed,
+including persistence, invalid-preference fallback and unchanged image/history
+across all themes. Light and colored themes passed local visual checks.
+Windows tests, packaged launch/review/project/export checks, installation,
+desktop shortcut and upgrade preservation checks passed. This preview remains
+unsigned; OpenCL device comparisons skip on the Windows runner.
+
+Previous version:
 
 [Download Easy Astro Studio 0.15](https://github.com/KennethRHans/Astrophotography/actions/runs/41545469531/artifacts/13188367688).
 Close the app, extract the ZIP and run
