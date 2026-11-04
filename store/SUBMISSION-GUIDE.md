@@ -66,11 +66,16 @@ or migrate their files without their explicit choice.
 ## Listing material prepared in this folder
 
 LISTING-DRAFT.md contains proposed description, features and certification notes.
-PRIVACY-DRAFT.md records the app's actual data flows and the decisions still
-needed before publishing a privacy policy. Review it and publish an approved
-policy at a stable HTTPS URL, then supply the URL in the Store listing and app.
-The feedback form collects optional name/email and a message through Formspree,
-so this requirement applies even though astronomy processing is local.
+The published [privacy policy](../PRIVACY.md) uses starsandfits@gmail.com for
+privacy/deletion requests and describes the actual local processing and optional
+Formspree feedback data flows. Enter this URL in the Store privacy-policy field:
+
+https://github.com/KennethRHans/Astrophotography/blob/codex/seestar-studio-preview/PRIVACY.md
+
+Version 1.0.1 adds links in Settings, About and the feedback form. Use the newest
+*-Store-UNSIGNED.msix package for the submission, replacing the older package
+if needed. A fixed feedback retention duration has not been invented; the
+published policy describes purpose-based retention and deletion requests.
 
 Add actual screenshots of the current app (dark/light, exposure review and an
 image you own), support contact/URL, privacy URL, market/pricing choices and the

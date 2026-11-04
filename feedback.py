@@ -1,8 +1,8 @@
 """User-written feedback, sent only when Send is clicked."""
 import json
 import re
-from PySide6 import QtCore, QtNetwork, QtWidgets as W
-from community_links import FEEDBACK_URL
+from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets as W
+from community_links import FEEDBACK_URL,PRIVACY_URL
 
 from app_version import VERSION as APP_VERSION
 
@@ -18,6 +18,10 @@ class FeedbackDialog(W.QDialog):
         layout = W.QVBoxLayout(self)
         intro = W.QLabel('Found a problem or have an idea? Send the developer a message. Add your email if you would like a reply.')
         intro.setWordWrap(True);layout.addWidget(intro)
+        disclosure=W.QLabel('Clicking Send shares your message, report type, app/version and any name/email you enter with Astrivanta through Formspree. Images and logs are not attached automatically.')
+        disclosure.setWordWrap(True);layout.addWidget(disclosure)
+        self.privacy_button=W.QPushButton('Read Privacy Policy');self.privacy_button.clicked.connect(self.open_privacy);layout.addWidget(self.privacy_button)
+
         fields = W.QFormLayout(); layout.addLayout(fields)
         self.kind = W.QComboBox(); self.kind.addItems(['Report a bug', 'Suggest a fix / improvement'])
         self.name = W.QLineEdit(); self.name.setMaxLength(150)
@@ -31,6 +35,10 @@ class FeedbackDialog(W.QDialog):
         self.send = self.buttons.addButton('Send',W.QDialogButtonBox.AcceptRole)
         self.send.clicked.connect(self.submit);self.buttons.rejected.connect(self.reject);layout.addWidget(self.buttons)
         self.timeout = QtCore.QTimer(self);self.timeout.setSingleShot(True);self.timeout.setInterval(30000);self.timeout.timeout.connect(self.abort_timeout)
+
+    def open_privacy(self):
+        if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(PRIVACY_URL)):
+            self.status.setText('Open the privacy policy in your browser: '+PRIVACY_URL)
 
     def submit(self):
         if self.reply is not None:return

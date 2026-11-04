@@ -56,3 +56,15 @@ def test_timeout_preserves_message_and_footer_links(monkeypatch):
     feedback=[];monkeypatch.setattr(FeedbackDialog,'exec',lambda self: feedback.append(self.windowTitle()) or W.QDialog.Rejected)
     window.feedback_button.click();assert feedback==['Report a Bug / Suggest a Fix']
     window.close()
+
+
+def test_privacy_link_available_before_feedback_submission(monkeypatch):
+    app=W.QApplication.instance() or W.QApplication([])
+    network=Network();dialog=FeedbackDialog(network=network);opened=[]
+    monkeypatch.setattr(QtGui.QDesktopServices,'openUrl',lambda url:opened.append(url.toString()) or True)
+    dialog.privacy_button.click()
+    assert opened==[community_links.PRIVACY_URL] and not network.requests
+    dialog.close()
+    window=Window(ask_on_close=False);window.privacy_action.trigger()
+    assert opened==[community_links.PRIVACY_URL,community_links.PRIVACY_URL]
+    window.close()

@@ -1,8 +1,20 @@
-# Easy Astro Studio — 1.0 Microsoft Store preparation
+# Easy Astro Studio — 1.0.1 Store submission candidate
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Privacy policy (1.0.1)
+
+[Easy Astro Studio Privacy Policy](PRIVACY.md) is published at:
+https://github.com/KennethRHans/Astrophotography/blob/codex/seestar-studio-preview/PRIVACY.md
+
+Public privacy/deletion contact: starsandfits@gmail.com. The policy describes
+local image/project processing, optional Formspree submissions, external links,
+provider processing, retention and user requests. No fixed automatic feedback
+deletion period is claimed. Settings, About and the feedback form link to the
+policy; the feedback dialog explains what Send transmits before submission.
+The updated package is version 1.0.1.0. Windows validation is in progress.
 
 ## Microsoft Store preparation (1.0)
 

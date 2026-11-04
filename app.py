@@ -254,6 +254,7 @@ class Window(W.QMainWindow):
         community_layout.addWidget(self.planner_banner)
         root_layout.addWidget(self.community_panel)
         settings_menu=self.menuBar().addMenu('Settings');theme_menu=settings_menu.addMenu('Theme')
+        self.privacy_action=QtGui.QAction('Privacy Policy',self);self.privacy_action.triggered.connect(lambda:self.open_community_link(community_links.PRIVACY_URL));settings_menu.addAction(self.privacy_action)
         self.theme_actions={};self.theme_group=QtGui.QActionGroup(self);self.theme_group.setExclusive(True)
         for name in THEMES:
             action=QtGui.QAction(name,self);action.setCheckable(True);action.setChecked(name==self.theme_name)
@@ -276,7 +277,8 @@ class Window(W.QMainWindow):
     def show_about(self):
         W.QMessageBox.about(self,'About Easy Astro Studio',
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
-            '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>')
+            '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>'
+            '<p><a href="'+community_links.PRIVACY_URL+'">Privacy Policy</a> · Privacy contact: starsandfits@gmail.com</p>')
 
     def review_exposures(self):
         if self.worker is not None or self.project_worker is not None or not self.files.count():return
