@@ -14,7 +14,15 @@ local image/project processing, optional Formspree submissions, external links,
 provider processing, retention and user requests. No fixed automatic feedback
 deletion period is claimed. Settings, About and the feedback form link to the
 policy; the feedback dialog explains what Send transmits before submission.
-The updated package is version 1.0.1.0. Windows validation is in progress.
+The updated package is version 1.0.1.0. All 43 local tests passed. Windows
+tests, manifest/archive identity validation, installed MSIX activation,
+processing/export/project/theme checks and legacy installation/upgrade checks
+passed. No live feedback was sent while testing the privacy links.
+
+[Download the updated Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/41851417254/artifacts/13336166867).
+Extract it and upload `EasyAstroStudio-1.0.1-x64-Store-UNSIGNED.msix` to the
+submission's Packages section. Put the public policy URL above into the Store
+privacy-policy field. Microsoft certification and publication remain pending.
 
 ## Microsoft Store preparation (1.0)
 
