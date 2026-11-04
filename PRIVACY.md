@@ -28,8 +28,8 @@ temporary files on your device. Uninstalling the app does not necessarily remove
 images, projects or exports you saved in your own folders.
 
 You do not need an app account for image processing. The desktop app does not
-include an advertising or usage-analytics SDK and does not automatically send
-usage analytics or crash reports to Astrivanta.
+include an advertising or usage-analytics SDK or implement its own automatic
+crash-reporting service.
 
 ## Optional bug reports and suggestions
 
