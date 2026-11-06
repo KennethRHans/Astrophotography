@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
-from macos_access import configure_storage, sandboxed
+from macos_access import configure_storage, sandboxed, select_files, select_save_file, file_access
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -312,7 +312,10 @@ class Window(W.QMainWindow):
         position = widget.mapTo(self.sidebar_scroll.widget(), QtCore.QPoint(0, 0)).y()
         self.sidebar_scroll.verticalScrollBar().setValue(position)
     def add_files(self):
-        paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+        if sys.platform == 'darwin':
+            paths = select_files('Select individual exposures', ['fit', 'fits'], multiple=True)
+        else:
+            paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
         existing = {self.files.item(i).text() for i in range(self.files.count())}
         self.files.addItems([p for p in paths if p not in existing])
         self.update_actions()
@@ -326,7 +329,11 @@ class Window(W.QMainWindow):
     def start(self, single):
         if self.project_worker is not None:return
         if single:
-            path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+            if sys.platform == 'darwin':
+                selected = select_files('Open a finished stack', ['fit', 'fits'])
+                path = selected[0] if selected else ''
+            else:
+                path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
             if not path: return
             paths = [path]
         else:
@@ -514,17 +521,22 @@ class Window(W.QMainWindow):
         image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
         self.preview.set_image(image,(self.linear.shape[1],self.linear.shape[0]))
     def save(self):
-        folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
-        dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
-        dialog.setAcceptMode(W.QFileDialog.AcceptSave)
-        dialog.setFileMode(W.QFileDialog.AnyFile)
-        dialog.setNameFilters(['16-bit TIFF (*.tif)', 'PNG (*.png)', 'JPG / JPEG (*.jpg *.jpeg)', 'Linear FITS (*.fits)'])
-        dialog.setDefaultSuffix('tif')
-        dialog.selectFile(engine.export_basename(self.header, self.source_name))
-        dialog.filterSelected.connect(lambda selected: dialog.setDefaultSuffix('fits' if 'FITS' in selected else 'png' if 'PNG' in selected else 'jpg' if 'JPG' in selected else 'tif'))
-        if dialog.exec() != W.QDialog.Accepted:
-            return
-        path = dialog.selectedFiles()[0]
+        if sys.platform == 'darwin':
+            path = select_save_file('Export: use .tif, .png, .jpg or .fits (FITS saves linear data)',
+                                    engine.export_basename(self.header, self.source_name)+'.tif',
+                                    ['tif', 'tiff', 'png', 'jpg', 'jpeg', 'fits', 'fit'])
+        else:
+            folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
+            dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
+            dialog.setAcceptMode(W.QFileDialog.AcceptSave)
+            dialog.setFileMode(W.QFileDialog.AnyFile)
+            dialog.setNameFilters(['16-bit TIFF (*.tif)', 'PNG (*.png)', 'JPG / JPEG (*.jpg *.jpeg)', 'Linear FITS (*.fits)'])
+            dialog.setDefaultSuffix('tif')
+            dialog.selectFile(engine.export_basename(self.header, self.source_name))
+            dialog.filterSelected.connect(lambda selected: dialog.setDefaultSuffix('fits' if 'FITS' in selected else 'png' if 'PNG' in selected else 'jpg' if 'JPG' in selected else 'tif'))
+            if dialog.exec() != W.QDialog.Accepted:
+                return
+            path = dialog.selectedFiles()[0]
         if not path: return
         try:
             rendered = None if Path(path).suffix.lower() in ('.fit', '.fits') else engine.render(self.linear, *self.settings(), model=self.background, gpu=self.gpu)
@@ -608,7 +620,10 @@ class Window(W.QMainWindow):
         path=None if save_as else self.project_path
         if not path:
             initial=str(Path(QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DocumentsLocation))/(engine.export_basename(self.header,self.source_name)+'.astro'))
-            path,_=W.QFileDialog.getSaveFileName(self,'Save project',initial,'Easy Astro Studio project (*.astro)')
+            if sys.platform == 'darwin':
+                path = select_save_file('Save project', Path(initial).name, ['astro'])
+            else:
+                path,_=W.QFileDialog.getSaveFileName(self,'Save project',initial,'Easy Astro Studio project (*.astro)')
             if not path:return
             if Path(path).suffix.lower()!='.astro':path+='.astro'
         self.save_project_path(path,after_save)
@@ -617,7 +632,11 @@ class Window(W.QMainWindow):
         payload=(self.original_linear,self.original_header.copy(),self.project_manifest())
         self._start_project_io(path,payload)
     def open_project_dialog(self):
-        path,_=W.QFileDialog.getOpenFileName(self,'Open saved project','','Easy Astro Studio project (*.astro)')
+        if sys.platform == 'darwin':
+            selected = select_files('Open saved project', ['astro'])
+            path = selected[0] if selected else ''
+        else:
+            path,_=W.QFileDialog.getOpenFileName(self,'Open saved project','','Easy Astro Studio project (*.astro)')
         if path and self.allow_replace():self.open_project_path(path)
     def open_project_path(self,path):self._after_io=None;self._start_project_io(path,None)
     def _start_project_io(self,path,payload):
@@ -708,6 +727,7 @@ if __name__ == '__main__':
         else:
             raise AssertionError('Sandbox allowed access to an unselected external file')
     app = W.QApplication(sys.argv)
+    app.aboutToQuit.connect(file_access.close)
     app.setApplicationName('Easy Astro Studio')
     app.setApplicationDisplayName('Easy Astro Studio')
     app.setStyle('Fusion')
@@ -779,5 +799,6 @@ if __name__ == '__main__':
             destination=Path(sys.argv[sys.argv.index('--smoke-result')+1])
             destination.write_text(json.dumps(dict(ok=True,version=VERSION,package_identity=has_package_identity())),encoding='utf-8')
         window.close()
+        file_access.close()
         sys.exit(0)
     sys.exit(app.exec())

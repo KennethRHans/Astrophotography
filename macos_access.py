@@ -1,6 +1,6 @@
 """macOS container storage and coordinated atomic project replacement.
 
-Native Qt open/save panels grant access for the current session. Projects embed
+Native Cocoa panels retain security-scoped URLs for the current session. Projects embed
 their image; source paths in their manifest never serve as persistent grants.
 """
 from contextlib import contextmanager
@@ -8,6 +8,63 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+
+
+class FileAccess:
+    """Keep selected URLs alive until workers and repeated saves are finished."""
+    def __init__(self):
+        self.urls = {}
+
+    def retain(self, url):
+        path = str(url.path())
+        if path not in self.urls:
+            active = bool(url.startAccessingSecurityScopedResource())
+            # A false result can mean the URL is already implicitly accessible
+            # (for example, a file inside the container). Retain either way.
+            self.urls[path] = (url, active)
+        return path
+
+    def close(self):
+        for url, active in self.urls.values():
+            if active:
+                url.stopAccessingSecurityScopedResource()
+        self.urls.clear()
+
+
+file_access = FileAccess()
+
+
+def select_files(title, extensions, multiple=False):
+    """Use original NSURLs from NSOpenPanel, not URLs recreated from paths.
+
+    Qt's file engine can manage its own sandbox access, but Python/Astropy
+    reads bypass that engine. Explicit scopes must outlive the panel and the
+    asynchronous stacking/project workers.
+    """
+    from AppKit import NSOpenPanel, NSModalResponseOK
+    panel = NSOpenPanel.openPanel()
+    panel.setTitle_(title)
+    panel.setCanChooseFiles_(True)
+    panel.setCanChooseDirectories_(False)
+    panel.setAllowsMultipleSelection_(multiple)
+    panel.setAllowedFileTypes_(extensions)
+    if panel.runModal() != NSModalResponseOK:
+        return []
+    return [file_access.retain(url) for url in panel.URLs()]
+
+
+def select_save_file(title, default_name, extensions):
+    from AppKit import NSSavePanel, NSModalResponseOK
+    panel = NSSavePanel.savePanel()
+    panel.setTitle_(title)
+    panel.setNameFieldStringValue_(default_name)
+    panel.setAllowedFileTypes_(extensions)
+    panel.setAllowsOtherFileTypes_(False)
+    panel.setCanCreateDirectories_(True)
+    panel.setExtensionHidden_(False)
+    if panel.runModal() != NSModalResponseOK:
+        return ''
+    return file_access.retain(panel.URL())
 
 
 def sandboxed():

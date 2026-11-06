@@ -42,6 +42,13 @@ NSFileCoordinator and NSItemReplacementDirectory, then Foundation replacement,
 so a failed archive write preserves the existing project without requiring
 permission for arbitrary sibling files.
 
+The Mac file dialogs use NSOpenPanel/NSSavePanel directly and retain the
+original security-scoped NSURLs until the app quits. Astropy and NumPy use
+Python file I/O rather than Qt's file engine, so Qt-managed selection alone
+does not reliably authorize background workers. Each acquired scope is stopped
+once at shutdown. Export format on Mac follows the filename extension entered
+in the save panel (default `.tif`).
+
 Projects include their image and edits. On sandbox reopen, original exposure
 paths remain provenance but are not repopulated as stack inputs. To re-stack,
 select the originals again with Add exposures. No persistent file bookmarks
