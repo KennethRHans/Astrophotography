@@ -21,7 +21,11 @@ jobs:
       - name: Run test suite
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p work
+          python -m pytest -q 2>&1 | tee work/macos-tests.log
       # Astropy's optional plotting imports raise pytest.skip when matplotlib
       # is absent. PyInstaller's isolated hook cannot handle that exception.
       - name: Remove test runner before freezing runtime
