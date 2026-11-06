@@ -80,3 +80,26 @@ def test_new_brand_bayer_guidance_and_gpu_worker(monkeypatch):
     monkeypatch.setattr(gpu,'GpuProcessor',fail)
     worker.run()
     assert calls[-1] is None and any('bounded CPU chunks' in line for line in messages)
+
+
+def test_sandbox_project_restores_image_without_reusing_source_access(tmp_path, monkeypatch):
+    import app as application
+    monkeypatch.setattr(application, 'sandboxed', lambda: True)
+    qt = QApplication.instance() or QApplication([])
+    window = Window(ask_on_close=False)
+    pixels = np.ones((30, 40, 3), dtype='float32') * 100
+    window.loaded(pixels, fits.Header())
+    window.source_paths = ['/unselected/light.fit']
+    window.files.addItem('/unselected/light.fit')
+    path = tmp_path / 'portable.astro'
+    window.save_project_path(path)
+    finish_io(qt, window)
+    window.open_project_path(path)
+    finish_io(qt, window)
+    np.testing.assert_array_equal(window.original_linear, pixels)
+    assert window.source_paths == ['/unselected/light.fit']
+    assert window.files.count() == 0
+    assert not window.run.isEnabled()
+    assert window.export.isEnabled()
+    assert 'select them with Add exposures' in window.log.toPlainText()
+    window.close()

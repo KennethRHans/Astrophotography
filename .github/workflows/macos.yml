@@ -6,6 +6,10 @@ permissions:
   contents: read
 jobs:
   preview:
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [preview, sandbox]
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -27,33 +31,47 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p work
-          python scripts/build_macos.py 2>&1 | tee work/macos-build.log
+          if [[ '${{ matrix.variant }}' == sandbox ]]; then
+            python scripts/build_macos.py --sandbox 2>&1 | tee work/macos-build.log
+          else
+            python scripts/build_macos.py 2>&1 | tee work/macos-build.log
+          fi
       - name: Test bundled app with native Qt platform
         run: |
           python - <<'PY'
           import json
           import subprocess
           from pathlib import Path
+          import plistlib
+          variant = '${{ matrix.variant }}'
+          command = ['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio', '--smoke-test']
           result = Path('work/macos-smoke.json').resolve()
           result.parent.mkdir(exist_ok=True)
-          subprocess.run(['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio',
-                          '--smoke-test', '--smoke-result', str(result)],
-                         check=True, timeout=180)
-          assert json.loads(result.read_text())['ok']
+          if variant == 'sandbox':
+              signed = subprocess.run(['codesign', '-d', '--entitlements', ':-',
+                                       'dist/EasyAstroStudio.app'], capture_output=True, check=True)
+              entitlements = plistlib.loads(signed.stdout)
+              assert entitlements['com.apple.security.app-sandbox'] is True
+              assert entitlements['com.apple.security.files.user-selected.read-write'] is True
+              denied = Path('work/unselected-private-file.txt').resolve()
+              denied.write_text('sandbox must deny access')
+              command += ['--sandbox-probe', str(denied)]
+          subprocess.run(command, check=True, timeout=180)
+          result.write_text(json.dumps(dict(ok=True, variant=variant)))
           PY
       - name: Archive app preserving bundle permissions
-        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-preview.zip
+        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-${{ matrix.variant }}.zip
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: EasyAstroStudio-macOS-diagnostics
+          name: EasyAstroStudio-macOS-${{ matrix.variant }}-diagnostics
           path: work/macos-*.log
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: EasyAstroStudio-macOS-preview
+          name: EasyAstroStudio-macOS-${{ matrix.variant }}
           path: |
-            dist/EasyAstroStudio-macOS-preview.zip
+            dist/EasyAstroStudio-macOS-${{ matrix.variant }}.zip
             work/macos-smoke.json
           if-no-files-found: error

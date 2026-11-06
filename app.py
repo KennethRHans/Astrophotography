@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
+from macos_access import configure_storage, sandboxed
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -364,6 +365,7 @@ class Window(W.QMainWindow):
         for control in (self.run, self.open, self.add, self.remove, self.bayer, self.use_gpu): control.setEnabled(True)
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
+        self.use_gpu.setEnabled(sys.platform != 'darwin')
         self.update_actions()
     def loaded(self, linear, header):
         self._history_ready=False
@@ -641,7 +643,12 @@ class Window(W.QMainWindow):
             self.loaded(linear,header)
             self.source_name=str(meta.get('source_name','image'))
             self.source_paths=list(meta.get('source_files',[]))
-            self.files.clear();self.files.addItems(meta.get('input_files',[]))
+            self.files.clear()
+            if sandboxed():
+                if meta.get('input_files'):
+                    self.log.appendPlainText('Project image restored. To stack the original exposures again, select them with Add exposures.')
+            else:
+                self.files.addItems(meta.get('input_files',[]))
             if self.bayer.findText(meta.get('bayer','Auto'))>=0:self.bayer.setCurrentText(meta.get('bayer','Auto'))
             self.apply_edit_state(meta['state'])
             history=meta.get('history')
@@ -649,7 +656,7 @@ class Window(W.QMainWindow):
             else:self.history.reset(self.edit_state())
             view=meta.get('view',{})
             self.mark_clipping.setChecked(bool(view.get('mark_clipping',False)))
-            self.use_gpu.setChecked(bool(view.get('gpu',False)))
+            self.use_gpu.setChecked(bool(view.get('gpu',False)) and sys.platform != 'darwin')
             self.update_preview()
             if view.get('fit',True):self.preview.fit_image()
             else:
@@ -668,6 +675,7 @@ class Window(W.QMainWindow):
         self.project_worker.deleteLater();self.project_worker=None
         self.step_equipment.setEnabled(True);self.step_load.setEnabled(True);self.step_stack.setEnabled(True)
         for widget in (self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(True)
+        self.use_gpu.setEnabled(sys.platform != 'darwin')
         self.step_adjust.setEnabled(self.linear is not None);self.step_export.setEnabled(self.linear is not None)
         self.progress_bar.setRange(0,100);self.progress_bar.setValue(100 if self._project_io_ok else 0)
         self.update_actions()
@@ -689,6 +697,16 @@ class Window(W.QMainWindow):
 if __name__ == '__main__':
     from windows_identity import configure_taskbar_identity,has_package_identity
     configure_taskbar_identity()
+    configure_storage()
+    if '--sandbox-probe' in sys.argv:
+        assert sandboxed(), 'Expected App Sandbox container'
+        denied_path = Path(sys.argv[sys.argv.index('--sandbox-probe')+1])
+        try:
+            denied_path.read_bytes()
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError('Sandbox allowed access to an unselected external file')
     app = W.QApplication(sys.argv)
     app.setApplicationName('Easy Astro Studio')
     app.setApplicationDisplayName('Easy Astro Studio')

@@ -28,15 +28,52 @@ GPU controls are disabled on macOS for this preview. Existing OpenCL stacking
 requires double precision; a future Apple GPU backend needs separate numerical
 validation. Windows GPU support remains available.
 
-## Before App Store submission
+## Sandbox development build
+
+Run `python scripts/build_macos.py --sandbox` to sign a separate development
+build with App Sandbox. The workflow produces `EasyAstroStudio-macOS-sandbox`
+alongside the regular preview. Neither is a distribution-signed App Store app.
+
+The sandbox grants read/write access to files selected in native open/save
+panels, plus outgoing networking for the user-initiated feedback form. It has
+no blanket access to Pictures, Documents, or the home directory. Temporary
+stack storage uses Foundation's app temporary directory. Project writes use
+NSFileCoordinator and NSItemReplacementDirectory, then Foundation replacement,
+so a failed archive write preserves the existing project without requiring
+permission for arbitrary sibling files.
+
+Projects include their image and edits. On sandbox reopen, original exposure
+paths remain provenance but are not repopulated as stack inputs. To re-stack,
+select the originals again with Add exposures. No persistent file bookmarks
+are needed for this workflow; opening the project grants its current session
+access. Themes/settings now live in the sandbox container, so the first launch
+may start with the default theme rather than the previous preview's preference.
+
+CI checks the signed sandbox entitlement, verifies an unselected external file
+cannot be read, then runs the bundled app's processing/project/export smoke
+test in its container. This does not automate the native file panels.
+
+On a real Mac, validate these additional sandbox cases before release:
+
+1. Use native dialogs to import exposures outside the container, stack, cancel,
+   and re-stack. Review/rate exposures as well.
+2. Export each supported format into a chosen external folder.
+3. Save a new `.astro` there, change an edit, and save over it. Try Save As too.
+4. Quit/relaunch and select the project again. Edit, save over it, and export
+   without having access to any original exposures. Re-select originals if
+   you want to stack again.
+5. Repeat with iCloud Drive/external volumes, full disk or read-only destinations,
+   and confirm failed saves preserve the previous project.
+6. Confirm theme persistence and feedback UI/network behavior (send only a
+   deliberate test message). Check container storage cleanup after processing.
+
+## Remaining App Store work
 
 - Validate FITS import, alignment/stacking, edit previews, project round trips,
   cancellation, large stacks, and all exports on a physical Apple Silicon Mac.
 - Add a proper macOS app icon, document type registration, and native menu polish.
 - Audit dependencies and bundled license notices, including Qt distribution terms.
-- Implement and test App Sandbox file access, including access to source files
-  reopened through saved projects (security-scoped bookmarks if needed).
-- Validate temporary stack storage and atomic project saves inside the sandbox.
+- Complete the sandbox development build's native file-panel checks above.
 - Configure the real bundle ID, Apple distribution certificates, provisioning,
   sandbox entitlements, and signed embedded libraries/frameworks.
 - Prepare privacy disclosures and App Store metadata, then validate and submit

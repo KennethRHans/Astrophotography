@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import sys
+from contextlib import contextmanager
 from zipfile import ZipFile,ZIP_DEFLATED
 import numpy as np
 from astropy.io import fits
@@ -65,13 +67,24 @@ def save_project(path,linear,header,manifest):
     validate_state(meta['state'],linear.shape)
     encoded=json.dumps(meta,ensure_ascii=False,allow_nan=False).encode('utf-8')
     if len(encoded)>MAX_MANIFEST_BYTES:raise ValueError('Project metadata is too large')
-    fd,temp=tempfile.mkstemp(prefix='.'+path.name+'-',suffix='.tmp',dir=path.parent);os.close(fd)
-    try:
+    with project_destination(path) as temp:
         with ZipFile(temp,'w',ZIP_DEFLATED,compresslevel=1,allowZip64=True) as archive:
             archive.writestr('project.json',encoded)
             archive.writestr('header.txt',header.tostring(sep='\n',endcard=True,padding=False))
             with archive.open('linear.npy','w',force_zip64=True) as stream:
                 np.save(stream,np.asarray(linear,dtype=np.float32),allow_pickle=False)
+
+
+@contextmanager
+def project_destination(path):
+    if sys.platform == 'darwin':
+        from macos_access import coordinated_destination
+        with coordinated_destination(path) as temp:
+            yield temp
+        return
+    fd,temp=tempfile.mkstemp(prefix='.'+path.name+'-',suffix='.tmp',dir=path.parent);os.close(fd)
+    try:
+        yield temp
         os.replace(temp,path)
     finally:
         if os.path.exists(temp):os.unlink(temp)
