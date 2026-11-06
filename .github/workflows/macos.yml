@@ -1,0 +1,43 @@
+name: macOS preview
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pytest 'pyinstaller>=6.16,<7'
+      - name: Run test suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - run: python scripts/build_macos.py
+      - name: Test bundled app with native Qt platform
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+          result = Path('work/macos-smoke.json').resolve()
+          result.parent.mkdir(exist_ok=True)
+          subprocess.run(['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio',
+                          '--smoke-test', '--smoke-result', str(result)],
+                         check=True, timeout=180)
+          assert json.loads(result.read_text())['ok']
+          PY
+      - name: Archive app preserving bundle permissions
+        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-preview.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-macOS-preview
+          path: |
+            dist/EasyAstroStudio-macOS-preview.zip
+            work/macos-smoke.json
+          if-no-files-found: error
