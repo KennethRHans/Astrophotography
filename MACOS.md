@@ -71,7 +71,9 @@ On a real Mac, validate these additional sandbox cases before release:
    you want to stack again.
 5. Repeat with iCloud Drive/external volumes, full disk or read-only destinations,
    and confirm failed saves preserve the previous project.
-6. Confirm theme persistence and feedback UI/network behavior (send only a
+6. Minimize the window and click the Dock icon; confirm the existing window
+   returns with its image and unsaved edits. Repeat after switching to Finder.
+7. Confirm theme persistence and feedback UI/network behavior (send only a
    deliberate test message). Check container storage cleanup after processing.
 
 ## Remaining App Store work

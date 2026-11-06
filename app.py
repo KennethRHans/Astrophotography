@@ -7,6 +7,7 @@ import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 from macos_access import configure_storage, sandboxed, select_files, select_save_file, select_export_file, file_access
+from macos_window import install_reopen_handler
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -730,6 +731,7 @@ if __name__ == '__main__':
     app.setApplicationDisplayName('Easy Astro Studio')
     app.setStyle('Fusion')
     window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()
+    install_reopen_handler(app, window)
     if '--smoke-test' in sys.argv:
         if '--smoke-write-theme' in sys.argv:window.set_theme(sys.argv[sys.argv.index('--smoke-write-theme')+1])
         if '--smoke-expect-theme' in sys.argv:assert window.theme_name==sys.argv[sys.argv.index('--smoke-expect-theme')+1]
@@ -748,6 +750,13 @@ if __name__ == '__main__':
             frames.append(sample);frames.append(sample)
             assert np.array_equal(combine(frames),sample)
         window.loaded(sample, fits.Header())
+        if sys.platform == 'darwin':
+            window.showMinimized(); app.processEvents()
+            app._mac_reopen_handler.handleReopen_withReplyEvent_(None, None)
+            app.processEvents()
+            assert not window.isMinimized(), 'Dock reopen failed to restore the window'
+            assert window.isVisible()
+            np.testing.assert_array_equal(window.linear, sample)
         window.sliders['Background correction %'].setValue(50)
         window.reset.click()
         window.select_crop(5,0,80,60)
