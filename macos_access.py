@@ -80,7 +80,6 @@ def export_panel(default_name):
     accessory.addSubview_(label)
     accessory.addSubview_(popup)
     panel.setAccessoryView_(accessory)
-    panel.setAccessoryViewDisclosed_(True)
     apply_export_format(panel, 0)
     # Cocoa controls do not retain their target. The caller keeps this tuple
     # alive throughout runModal so changing the popup remains safe.

@@ -75,7 +75,6 @@ def test_native_export_selector_changes_extension_and_encoder(tmp_path, index, e
     panel, controller, popup = macos_access.export_panel('C56.tif')
     assert popup.numberOfItems() == 4
     assert panel.accessoryView() is not None
-    assert panel.isAccessoryViewDisclosed()
     popup.selectItemAtIndex_(index)
     assert native.sendAction_to_from_('formatChanged:', controller, popup)
     assert str(panel.nameFieldStringValue()) == 'C56' + extension
