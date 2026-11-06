@@ -17,6 +17,13 @@ and uploads a ZIP. It does not publish a release or submit to Apple.
 The bundle identifier is provisional and must match the eventual Apple record.
 The build has only an ad hoc development signature; it is not notarized.
 
+Use a runtime environment without pytest for packaging. If you installed pytest
+to run the tests, run `python -m pip uninstall -y pytest` before building (the
+workflow does this automatically after testing). Astropy's optional plotting
+imports otherwise raise a pytest skip exception when matplotlib is absent,
+which interrupts PyInstaller's isolated module collection. Excluding pytest
+from the bundle alone does not remove it from the build environment.
+
 GPU controls are disabled on macOS for this preview. Existing OpenCL stacking
 requires double precision; a future Apple GPU backend needs separate numerical
 validation. Windows GPU support remains available.
