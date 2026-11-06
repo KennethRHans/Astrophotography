@@ -33,6 +33,67 @@ class FileAccess:
 
 file_access = FileAccess()
 
+EXPORT_FORMATS = (
+    ('16-bit TIFF', ('tif', 'tiff')),
+    ('PNG', ('png',)),
+    ('JPEG', ('jpg', 'jpeg')),
+    ('Linear FITS (without display adjustments)', ('fits', 'fit')),
+)
+_export_controller = None
+
+
+def apply_export_format(panel, index):
+    extensions = EXPORT_FORMATS[index][1]
+    name = str(panel.nameFieldStringValue())
+    if not Path(name).name:
+        name = 'image'
+    panel.setAllowedFileTypes_(list(extensions))
+    panel.setNameFieldStringValue_(str(Path(name).with_suffix('.' + extensions[0])))
+
+
+def export_panel(default_name):
+    """Construct a native save panel with a visible format accessory."""
+    from AppKit import NSSavePanel, NSView, NSTextField, NSPopUpButton
+    from Foundation import NSObject, NSMakeRect
+    global _export_controller
+    if _export_controller is None:
+        class EasyAstroExportFormatController(NSObject):
+            def formatChanged_(self, sender):
+                apply_export_format(self.panel, int(sender.indexOfSelectedItem()))
+        _export_controller = EasyAstroExportFormatController
+
+    panel = NSSavePanel.savePanel()
+    panel.setTitle_('Export image')
+    panel.setNameFieldStringValue_(default_name)
+    panel.setAllowsOtherFileTypes_(False)
+    panel.setCanCreateDirectories_(True)
+    panel.setExtensionHidden_(False)
+    accessory = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 440, 44))
+    label = NSTextField.labelWithString_('Format:')
+    label.setFrame_(NSMakeRect(0, 12, 65, 22))
+    popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(70, 8, 365, 28), False)
+    popup.addItemsWithTitles_([name for name, extensions in EXPORT_FORMATS])
+    controller = _export_controller.alloc().init()
+    controller.panel = panel
+    popup.setTarget_(controller)
+    popup.setAction_('formatChanged:')
+    accessory.addSubview_(label)
+    accessory.addSubview_(popup)
+    panel.setAccessoryView_(accessory)
+    panel.setAccessoryViewDisclosed_(True)
+    apply_export_format(panel, 0)
+    # Cocoa controls do not retain their target. The caller keeps this tuple
+    # alive throughout runModal so changing the popup remains safe.
+    return panel, controller, popup
+
+
+def select_export_file(default_name):
+    from AppKit import NSModalResponseOK
+    panel, controller, popup = export_panel(default_name)
+    if panel.runModal() != NSModalResponseOK:
+        return ''
+    return file_access.retain(panel.URL())
+
 
 def select_files(title, extensions, multiple=False):
     """Use original NSURLs from NSOpenPanel, not URLs recreated from paths.

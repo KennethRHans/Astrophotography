@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from macos_access import FileAccess
 import macos_access
+import pytest
 
 
 class ScopedURL:
@@ -57,3 +58,34 @@ def test_implicit_access_does_not_stop_an_unacquired_scope():
     access.retain(url)
     access.close()
     assert url.stops == 0
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='Native Cocoa export panel')
+@pytest.mark.parametrize('index,extension,format_name', [
+    (0, '.tif', 'TIFF'), (1, '.png', 'PNG'),
+    (2, '.jpg', 'JPEG'), (3, '.fits', 'FITS'),
+])
+def test_native_export_selector_changes_extension_and_encoder(tmp_path, index, extension, format_name):
+    from AppKit import NSApplication
+    from PIL import Image
+    from astropy.io import fits
+    import numpy as np
+    import engine
+    native = NSApplication.sharedApplication()
+    panel, controller, popup = macos_access.export_panel('C56.tif')
+    assert popup.numberOfItems() == 4
+    assert panel.accessoryView() is not None
+    assert panel.isAccessoryViewDisclosed()
+    popup.selectItemAtIndex_(index)
+    assert native.sendAction_to_from_('formatChanged:', controller, popup)
+    assert str(panel.nameFieldStringValue()) == 'C56' + extension
+    assert list(panel.allowedFileTypes()) == list(macos_access.EXPORT_FORMATS[index][1])
+    target = tmp_path / str(panel.nameFieldStringValue())
+    pixels = np.ones((30, 40, 3), dtype='float32') * .5
+    engine.save(target, pixels, pixels, fits.Header())
+    if format_name == 'FITS':
+        with fits.open(target) as hdus:
+            np.testing.assert_array_equal(hdus[0].data, np.moveaxis(pixels, -1, 0))
+    else:
+        with Image.open(target) as exported:
+            assert exported.format == format_name

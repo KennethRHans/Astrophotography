@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
-from macos_access import configure_storage, sandboxed, select_files, select_save_file, file_access
+from macos_access import configure_storage, sandboxed, select_files, select_save_file, select_export_file, file_access
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -522,9 +522,7 @@ class Window(W.QMainWindow):
         self.preview.set_image(image,(self.linear.shape[1],self.linear.shape[0]))
     def save(self):
         if sys.platform == 'darwin':
-            path = select_save_file('Export: use .tif, .png, .jpg or .fits (FITS saves linear data)',
-                                    engine.export_basename(self.header, self.source_name)+'.tif',
-                                    ['tif', 'tiff', 'png', 'jpg', 'jpeg', 'fits', 'fit'])
+            path = select_export_file(engine.export_basename(self.header, self.source_name)+'.tif')
         else:
             folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
             dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
