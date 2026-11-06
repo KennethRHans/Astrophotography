@@ -26,6 +26,22 @@ jobs:
           set -o pipefail
           mkdir -p work
           python -m pytest -q 2>&1 | tee work/macos-tests.log
+      - name: Summarize native test failures
+        if: failure()
+        id: test_diagnostics
+        run: |
+          python - <<'PYCODE'
+          import os
+          from pathlib import Path
+          lines = Path('work/macos-tests.log').read_text().splitlines()
+          errors = [line.strip() for line in lines if line.startswith('E ') or line.startswith('FAILED ')]
+          summary = ' | '.join(dict.fromkeys(errors))[:1800]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('summary=' + summary + '\n')
+          PYCODE
+      - name: "Native test diagnostics: ${{ steps.test_diagnostics.outputs.summary }}"
+        if: failure()
+        run: echo "See macOS diagnostics artifact for the complete test log."
       # Astropy's optional plotting imports raise pytest.skip when matplotlib
       # is absent. PyInstaller's isolated hook cannot handle that exception.
       - name: Remove test runner before freezing runtime
