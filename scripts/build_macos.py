@@ -1,4 +1,4 @@
-"""Build an unsigned, CPU-only macOS preview on a Mac."""
+"""Build an ad hoc signed macOS preview with optional Metal adjustments."""
 import os
 import argparse
 from pathlib import Path
@@ -16,11 +16,15 @@ def main():
     os.chdir(root)
     sys.path.insert(0, str(root))
     from app_version import VERSION
+    from build_metal import build
+    metal_library = build()
     subprocess.run([
         sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--windowed', '--name', 'EasyAstroStudio',
         '--osx-bundle-identifier', 'com.astrivanta.easyastrostudio',
         '--add-data', 'assets:assets', '--hidden-import', 'sep',
+        '--add-data', 'macos/adjustments.metal:macos',
+        '--add-binary', str(metal_library)+':.',
         '--collect-submodules', 'skimage.transform',
         '--exclude-module', 'pyopencl', '--exclude-module', 'pytest',
         'app.py',

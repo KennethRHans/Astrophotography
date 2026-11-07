@@ -182,3 +182,13 @@ __kernel void combine_frames(__global float *v, __global float *out,
     out[p]=n ? (float)(total/n) : 0.0f;
 }
 '''
+
+
+def create_gpu_processor(for_stacking=False):
+    import sys
+    if sys.platform == 'darwin':
+        if for_stacking:
+            return None
+        from metal_gpu import MetalProcessor
+        return MetalProcessor()
+    return GpuProcessor()

@@ -35,9 +35,9 @@ class Worker(QtCore.QThread):
             gpu = None
             if self.use_gpu and not self.single:
                 try:
-                    from gpu import GpuProcessor
-                    gpu = GpuProcessor()
-                    self.message.emit('GPU row combining enabled: '+gpu.name)
+                    from gpu import create_gpu_processor
+                    gpu = create_gpu_processor(for_stacking=True)
+                    self.message.emit('GPU row combining enabled: '+gpu.name if gpu is not None else 'Stack combining and alignment use CPU; Metal accelerates image adjustments.')
                 except Exception as exc:
                     self.message.emit('GPU combining unavailable; using bounded CPU chunks: '+str(exc))
             result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested, self.progress.emit, gpu=gpu)
@@ -101,9 +101,8 @@ class Window(W.QMainWindow):
         self.use_gpu = VisibleGpuCheckBox('Click to use GPU for faster combining and image adjustments')
         self.use_gpu.setObjectName('gpuSwitch')
         if sys.platform == 'darwin':
-            self.use_gpu.setEnabled(False)
-            self.use_gpu.setText('CPU processing (Mac preview)')
-        self.use_gpu.setToolTip('GPU acceleration is unavailable in the Mac preview.' if sys.platform == 'darwin' else 'Accelerates row combining, stretch, saturation and smoothing. Star alignment stays on CPU. Uses bounded chunks with CPU fallback.')
+            self.use_gpu.setText('Use Metal GPU for image adjustments')
+        self.use_gpu.setToolTip('Metal accelerates stretch, color and smoothing. Stacking and alignment remain on CPU.' if sys.platform == 'darwin' else 'Accelerates row combining, stretch, saturation and smoothing. Star alignment stays on CPU. Uses bounded chunks with CPU fallback.')
         self.use_gpu.toggled.connect(self.toggle_gpu); gpu_row.addWidget(self.use_gpu); left_column.addWidget(self.gpu_panel)
         controls = W.QWidget(); controls.setObjectName('controlPanel')
         sidebar = W.QVBoxLayout(controls)
@@ -373,7 +372,7 @@ class Window(W.QMainWindow):
         for control in (self.run, self.open, self.add, self.remove, self.bayer, self.use_gpu): control.setEnabled(True)
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
-        self.use_gpu.setEnabled(sys.platform != 'darwin')
+        self.use_gpu.setEnabled(True)
         self.update_actions()
     def loaded(self, linear, header):
         self._history_ready=False
@@ -401,10 +400,11 @@ class Window(W.QMainWindow):
         self.gpu = None
         if enabled:
             try:
-                from gpu import GpuProcessor
-                self.gpu = GpuProcessor()
-                self.log.appendPlainText('GPU enabled for row combining and adjustments: '+self.gpu.name)
-                self.statusBar().showMessage('GPU combining/adjustments: '+self.gpu.name+' • Alignment: CPU')
+                from gpu import create_gpu_processor
+                self.gpu = create_gpu_processor(for_stacking=True)
+                scope = 'image adjustments' if sys.platform == 'darwin' else 'row combining and adjustments'
+                self.log.appendPlainText('GPU enabled for '+scope+': '+self.gpu.name)
+                self.statusBar().showMessage(self.gpu.name+' • '+('Stacking/alignment: CPU' if sys.platform == 'darwin' else 'Alignment: CPU'))
             except Exception as exc:
                 self.use_gpu.blockSignals(True); self.use_gpu.setChecked(False); self.use_gpu.blockSignals(False)
                 self.log.appendPlainText('Using CPU: '+str(exc))
@@ -674,7 +674,7 @@ class Window(W.QMainWindow):
             else:self.history.reset(self.edit_state())
             view=meta.get('view',{})
             self.mark_clipping.setChecked(bool(view.get('mark_clipping',False)))
-            self.use_gpu.setChecked(bool(view.get('gpu',False)) and sys.platform != 'darwin')
+            self.use_gpu.setChecked(bool(view.get('gpu',False)))
             self.update_preview()
             if view.get('fit',True):self.preview.fit_image()
             else:
@@ -693,7 +693,7 @@ class Window(W.QMainWindow):
         self.project_worker.deleteLater();self.project_worker=None
         self.step_equipment.setEnabled(True);self.step_load.setEnabled(True);self.step_stack.setEnabled(True)
         for widget in (self.use_gpu,self.preview,self.zoom_in,self.zoom_out,self.zoom_fit,self.zoom_actual,self.mark_clipping):widget.setEnabled(True)
-        self.use_gpu.setEnabled(sys.platform != 'darwin')
+        self.use_gpu.setEnabled(True)
         self.step_adjust.setEnabled(self.linear is not None);self.step_export.setEnabled(self.linear is not None)
         self.progress_bar.setRange(0,100);self.progress_bar.setValue(100 if self._project_io_ok else 0)
         self.update_actions()
@@ -750,6 +750,21 @@ if __name__ == '__main__':
             frames.append(sample);frames.append(sample)
             assert np.array_equal(combine(frames),sample)
         window.loaded(sample, fits.Header())
+        if sys.platform == 'darwin':
+            import ctypes
+            metal = ctypes.CDLL('/System/Library/Frameworks/Metal.framework/Metal')
+            metal.MTLCreateSystemDefaultDevice.restype = ctypes.c_void_p
+            if metal.MTLCreateSystemDefaultDevice():
+                window.use_gpu.setChecked(True)
+                assert window.gpu is not None and window.use_gpu.isChecked(), 'Bundled Metal backend failed'
+                reference = engine.render(sample, *window.settings())
+                accelerated = engine.render(sample, *window.settings(), gpu=window.gpu)
+                assert not window.gpu.disabled, window.gpu.last_error
+                np.testing.assert_allclose(accelerated, reference, atol=3e-5, rtol=3e-5)
+                window.use_gpu.setChecked(False)
+                print('Metal device available: bundled GPU validation passed', flush=True)
+            else:
+                print('No Metal device on this runner: GPU execution requires hardware testing', flush=True)
         if sys.platform == 'darwin':
             window.showMinimized(); app.processEvents()
             app._mac_reopen_handler.handleReopen_withReplyEvent_(None, None)

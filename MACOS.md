@@ -1,6 +1,6 @@
 # macOS preview
 
-This is a CPU-only desktop preview, not a Mac App Store submission.
+This is a desktop preview with optional Metal image adjustments, not a Mac App Store submission.
 Build on macOS with Python 3.12 and Xcode command line tools:
 
 ```sh
@@ -24,9 +24,32 @@ imports otherwise raise a pytest skip exception when matplotlib is absent,
 which interrupts PyInstaller's isolated module collection. Excluding pytest
 from the bundle alone does not remove it from the build environment.
 
-GPU controls are disabled on macOS for this preview. Existing OpenCL stacking
-requires double precision; a future Apple GPU backend needs separate numerical
-validation. Windows GPU support remains available.
+## Metal image adjustments
+
+The Mac GPU switch enables Metal stretch, saturation, brightness, contrast and
+Gaussian smoothing. Alignment and stack combination remain on CPU. Background
+modeling, normalization, percentiles and clipping masks also remain on CPU.
+Windows continues to use its existing OpenCL backend.
+
+The build compiles `macos/metal_bridge.m` with Apple's command line tools and
+bundles the bridge and Metal shader source. Metal compiles the shaders locally
+with fast math disabled. GPU buffers are transient; input data is preserved.
+Metal initialization compares a small synthetic image against CPU results
+(including smoothing) before enabling GPU mode. Failures, device loss or buffer
+limits produce a CPU result through the existing fallback. A previous GPU
+setting in a project is restored only if initialization succeeds.
+
+The Mac workflow compiles the native bridge and runs numerical comparisons
+when a Metal device is available. Hosted runners without Metal skip GPU
+execution explicitly; they cannot establish numerical correctness or speed on
+Apple Silicon hardware. The packaged smoke test also checks Metal when a device
+is available, including inside App Sandbox.
+
+On Apple Silicon, enable **Use Metal GPU for image adjustments** and check the
+log for the device name. Compare changes, crop behavior, and exported images
+with GPU off/on. Small previews may not be faster because allocation/dispatch
+costs can dominate. Full-resolution exports and smoothing are the main cases
+to measure. Stack-combining acceleration remains future work.
 
 ## Sandbox development build
 
