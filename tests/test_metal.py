@@ -36,3 +36,25 @@ def test_metal_matches_cpu_and_preserves_input():
             np.testing.assert_array_equal(image, original)
     finally:
         processor.close()
+
+
+def test_gpu_switch_requests_adjustments_backend(monkeypatch):
+    import gpu
+    from app import Window
+    from PySide6.QtWidgets import QApplication
+    qt = QApplication.instance() or QApplication([])
+    class Adjustments:
+        name = 'Test adjustments GPU'
+        disabled = False
+        last_error = None
+    calls = []
+    def factory(for_stacking=False):
+        calls.append(for_stacking)
+        return None if for_stacking else Adjustments()
+    monkeypatch.setattr(gpu, 'create_gpu_processor', factory)
+    window = Window(ask_on_close=False)
+    window.use_gpu.setChecked(True)
+    assert calls == [False]
+    assert window.gpu is not None and window.use_gpu.isChecked()
+    window.use_gpu.setChecked(False)
+    window.close()

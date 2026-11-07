@@ -401,7 +401,7 @@ class Window(W.QMainWindow):
         if enabled:
             try:
                 from gpu import create_gpu_processor
-                self.gpu = create_gpu_processor(for_stacking=True)
+                self.gpu = create_gpu_processor()
                 scope = 'image adjustments' if sys.platform == 'darwin' else 'row combining and adjustments'
                 self.log.appendPlainText('GPU enabled for '+scope+': '+self.gpu.name)
                 self.statusBar().showMessage(self.gpu.name+' • '+('Stacking/alignment: CPU' if sys.platform == 'darwin' else 'Alignment: CPU'))
