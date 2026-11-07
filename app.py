@@ -157,11 +157,13 @@ class Window(W.QMainWindow):
         self.sliders = {}
         self.slider_rows = {}
         self.slider_defaults = {}
-        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
+        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Sky brightness (stops ×100)', -200, 200, 0), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
             sidebar.addWidget(W.QLabel(label))
             row = SliderValueRow(low,high,default); sidebar.addWidget(row)
             slider = row.slider; self.sliders[label] = slider; self.slider_rows[label] = row
             self.slider_defaults[label] = default
+            if label == 'Sky brightness (stops ×100)':
+                row.setToolTip('Left darkens and right lightens darker sky tones. Bright highlights change less. Faint nebulosity also changes; compare before exporting.')
             slider.valueChanged.connect(self.schedule_preview)
             slider.sliderPressed.connect(self.commit_history)
             slider.sliderReleased.connect(self.commit_history)
@@ -268,6 +270,8 @@ class Window(W.QMainWindow):
         self.menuBar().addAction(self.about_action)
         self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+        if self.settings_store.value('processing/use_gpu', False, type=bool):
+            self.use_gpu.setChecked(True)
     def update_planner_banner(self):
         color=THEMES[self.theme_name]['link'];url=community_links.PLANNER_URL
         self.planner_banner.setText(f'Plan tonight\'s observing at <a style="color:{color}; text-decoration:underline" href="{url}">{url}</a>')
@@ -311,11 +315,24 @@ class Window(W.QMainWindow):
     def show_step(self, widget):
         position = widget.mapTo(self.sidebar_scroll.widget(), QtCore.QPoint(0, 0)).y()
         self.sidebar_scroll.verticalScrollBar().setValue(position)
-    def add_files(self):
+    def choose_fits(self, multiple=False):
+        title = 'Select individual exposures' if multiple else 'Open a finished stack'
+        folder = str(self.settings_store.value('files/last_fits_directory', '') or '')
         if sys.platform == 'darwin':
-            paths = select_files('Select individual exposures', ['fit', 'fits'], multiple=True)
+            paths = select_files(title, ['fit', 'fits'], multiple=multiple,
+                                 initial_directory=folder or None)
+        elif multiple:
+            paths, _ = W.QFileDialog.getOpenFileNames(self, title, folder, 'FITS (*.fit *.fits *.FIT *.FITS)')
         else:
-            paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+            path, _ = W.QFileDialog.getOpenFileName(self, title, folder, 'FITS (*.fit *.fits *.FIT *.FITS)')
+            paths = [path] if path else []
+        if paths:
+            self.settings_store.setValue('files/last_fits_directory', str(Path(paths[0]).parent))
+            self.settings_store.sync()
+        return paths
+
+    def add_files(self):
+        paths = self.choose_fits(multiple=True)
         existing = {self.files.item(i).text() for i in range(self.files.count())}
         self.files.addItems([p for p in paths if p not in existing])
         self.update_actions()
@@ -329,11 +346,8 @@ class Window(W.QMainWindow):
     def start(self, single):
         if self.project_worker is not None:return
         if single:
-            if sys.platform == 'darwin':
-                selected = select_files('Open a finished stack', ['fit', 'fits'])
-                path = selected[0] if selected else ''
-            else:
-                path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+            selected = self.choose_fits()
+            path = selected[0] if selected else ''
             if not path: return
             paths = [path]
         else:
@@ -397,6 +411,8 @@ class Window(W.QMainWindow):
         self._saved_signature=None if self.worker is not None and not self.worker.single else self.project_signature()
         self.update_actions()
     def toggle_gpu(self, enabled):
+        self.settings_store.setValue('processing/use_gpu', bool(enabled))
+        self.settings_store.sync()
         self.gpu = None
         if enabled:
             try:
@@ -498,10 +514,10 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1)
+        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
-                v['Brightness (stops ×100)']/100,v['Contrast %']/100)
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky brightness (stops ×100)']/100)
     def update_preview(self):
         if self.linear is None: return
         # Interactive display is reduced; export always renders at native resolution.
@@ -656,6 +672,9 @@ class Window(W.QMainWindow):
     def _project_opened(self,payload):
         try:
             linear,header,meta=payload
+            # Old projects predate the sky slider; neutral preserves their rendering.
+            for state in [meta['state'], *meta.get('history',{}).get('states',[])]:
+                state['sliders'].setdefault('Sky brightness (stops ×100)', 0)
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
             self.loaded(linear,header)
@@ -674,7 +693,7 @@ class Window(W.QMainWindow):
             else:self.history.reset(self.edit_state())
             view=meta.get('view',{})
             self.mark_clipping.setChecked(bool(view.get('mark_clipping',False)))
-            self.use_gpu.setChecked(bool(view.get('gpu',False)))
+            # GPU is an app preference, independent of the project's saved view.
             self.update_preview()
             if view.get('fit',True):self.preview.fit_image()
             else:

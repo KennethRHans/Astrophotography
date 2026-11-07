@@ -94,7 +94,7 @@ def select_export_file(default_name):
     return file_access.retain(panel.URL())
 
 
-def select_files(title, extensions, multiple=False):
+def select_files(title, extensions, multiple=False, initial_directory=None):
     """Use original NSURLs from NSOpenPanel, not URLs recreated from paths.
 
     Qt's file engine can manage its own sandbox access, but Python/Astropy
@@ -104,6 +104,9 @@ def select_files(title, extensions, multiple=False):
     from AppKit import NSOpenPanel, NSModalResponseOK
     panel = NSOpenPanel.openPanel()
     panel.setTitle_(title)
+    if initial_directory:
+        from Foundation import NSURL
+        panel.setDirectoryURL_(NSURL.fileURLWithPath_(str(initial_directory)))
     panel.setCanChooseFiles_(True)
     panel.setCanChooseDirectories_(False)
     panel.setAllowsMultipleSelection_(multiple)

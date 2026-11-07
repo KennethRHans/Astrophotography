@@ -113,3 +113,24 @@ On a real Mac, validate these additional sandbox cases before release:
 
 Developer ID distribution outside the store uses a separate signing and
 notarization process. Neither distribution path is implemented by this preview.
+
+## Remembered preferences and sky brightness
+
+The FITS import dialogs remember the folder from the last successful exposure
+or finished-stack selection, across launches. Cancelling leaves it unchanged.
+On macOS the saved path is a native-panel location hint, not a persistent file
+permission; users still select their files each session.
+
+GPU selection is an app preference. Opening a project does not override it.
+If the remembered GPU cannot initialize, the app uses CPU and logs the failure;
+the preference remains enabled for a future launch when the device is available.
+Explicitly turning GPU off is remembered too.
+
+Sky brightness adjusts darker rendered tones with a smooth luminance weight,
+reducing the adjustment toward bright highlights. Zero is neutral; negative
+values darken and positive values lighten. Values are hundredths of a stop.
+It is not a sky/object mask and can affect faint nebulosity. Original linear
+pixels and linear FITS exports are preserved. Preview and rendered exports use
+the same curve after CPU or GPU adjustments. The control participates in reset,
+undo, redo and project storage; older projects open with a neutral sky setting.
+The small final curve runs on CPU with either rendering backend.

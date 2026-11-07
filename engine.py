@@ -162,7 +162,7 @@ def correct_background(linear, strength=0, model=None):
 
 
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, model=None, gpu=None):
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, model=None, gpu=None):
     image = correct_background(linear, gradient, model)
     valid = (linear > 0).all(axis=-1)
     sample = image[valid]
@@ -178,6 +178,7 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
             if not np.isfinite(result).all():
                 raise RuntimeError('GPU returned nonfinite pixels')
+            result = adjust_sky(result, sky)
             result[~valid] = 0
             return result
         except Exception as exc:
@@ -191,8 +192,19 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
     if brightness != 0 or contrast != 1:
         image = np.clip((image*(2.**brightness)-.18)*contrast+.18,0,1)
+    image = adjust_sky(image, sky)
     image[~valid] = 0
     return image
+
+
+def adjust_sky(image, stops=0):
+    if stops == 0:
+        return image
+    luminance = image @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+    # Smooth luminance weighting, not an inferred sky/object segmentation.
+    weight = (1-np.clip(luminance, 0, 1))**3
+    gain = np.exp2(np.float32(stops)*weight)
+    return np.clip(image*gain[..., None], 0, 1)
 
 
 def fit_crop_ratio(bounds, ratio):

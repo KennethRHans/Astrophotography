@@ -28,7 +28,7 @@ def test_metal_matches_cpu_and_preserves_input():
             (17, 1.5, 2, -.5, .8), (60, 3, 1, 0, 1),
         ]:
             settings = dict(stretch=stretch, denoise=smoothing, saturation=saturation,
-                            brightness=brightness, contrast=contrast)
+                            brightness=brightness, contrast=contrast, sky=.75)
             expected = engine.render(image, **settings)
             actual = engine.render(image, gpu=processor, **settings)
             assert not processor.disabled, processor.last_error
