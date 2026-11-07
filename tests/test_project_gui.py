@@ -68,7 +68,7 @@ def test_new_brand_bayer_guidance_and_gpu_worker(monkeypatch):
     window.close()
     class Device:
         name='Test device'
-    monkeypatch.setattr(gpu,'GpuProcessor',Device)
+    monkeypatch.setattr(gpu,'create_gpu_processor',lambda **kwargs: Device())
     calls=[]
     def stack(*args,**kwargs):
         calls.append(kwargs['gpu']);return np.ones((2,2,3),dtype='float32'),fits.Header()
@@ -76,8 +76,8 @@ def test_new_brand_bayer_guidance_and_gpu_worker(monkeypatch):
     worker=Worker(['a.fit','b.fit'],'Auto',use_gpu=True)
     messages=[];worker.message.connect(messages.append);worker.run()
     assert isinstance(calls[-1],Device)
-    def fail():raise RuntimeError('No GPU')
-    monkeypatch.setattr(gpu,'GpuProcessor',fail)
+    def fail(**kwargs):raise RuntimeError('No GPU')
+    monkeypatch.setattr(gpu,'create_gpu_processor',fail)
     worker.run()
     assert calls[-1] is None and any('bounded CPU chunks' in line for line in messages)
 
