@@ -1,8 +1,52 @@
-# Easy Astro Studio — 1.0.1 Store submission candidate
+# Easy Astro Studio — 1.1.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Session tools, sky background and responsive previews (1.1.0)
+
+New project appears before Open project in the toolbar and File menu (Ctrl+N).
+It offers Save/Discard/Cancel for unsaved edits and clears the image, exposure
+list, history, crop and adjustment state. Original files, theme, Bayer choice,
+last FITS folder and GPU preference are preserved. New project is unavailable
+while stacking or project I/O is active.
+
+Add exposures and Open existing FITS stack start in the last selected FITS
+folder. Cancelled file dialogs do not overwrite it. An unavailable folder falls
+back to an existing parent or Documents. GPU selection is remembered per user;
+a driver/device failure uses CPU without forgetting the saved preference for a
+future start. The global preference takes priority over older projects' GPU view
+flag. An older project's enabled GPU choice can seed the preference if none has
+yet been saved. Windows settings are stored locally and do not upload data.
+
+Sky background % darkens or lightens shadows while applying less change to
+brighter tones. It is a display adjustment, not a semantic sky/object separation;
+faint nebulosity can change too. Zero is neutral. TIFF/PNG/JPEG reflect it; linear
+FITS export does not bake it in. Old .astro files gain a neutral Sky setting on
+load, including their undo history. New files retain the existing project format.
+
+Slider previews run in a background worker with one active render and one latest
+request. Dragging uses a reduced preview (up to 1280 pixels per side), then the
+current zoom's resolution is restored on release. Resized inputs and percentile
+normalization are reused until their inputs change. Crop/reset/initial-load
+operations retain immediate preview behavior. GPU render calls are serialized
+with export to avoid overlapping use of the same OpenCL kernels. The exposure
+list signature is cached; combining progress/log updates are throttled and the
+visible log keeps at most 2,000 lines. Preview work from a previous project is
+ignored after New project. These changes improve UI responsiveness, not the
+underlying speed of CPU alignment, storage or every processing phase.
+
+All 51 local tests passed, including pending-preview safety, latest-request
+coalescing/UI heartbeats, project save protection, old-project migration,
+preferences, cache reuse and CPU/software-OpenCL sky-adjustment comparisons.
+A Linux CPU check using a full-resolution 2160×3840 Seestar stack and 546
+exposure-list entries measured a maximum slider-handler duration of 0.76 ms,
+with the UI heartbeat continuing through the render and the latest settings
+shown correctly. This is a UI responsiveness check, not a Windows/RTX 5070
+stacking-speed guarantee. A shared OpenCL processor also passed concurrent
+background-preview/export numeric comparisons on software OpenCL.
+Windows Store package validation is in progress for version 1.1.0.0.
 
 ## Privacy policy (1.0.1)
 

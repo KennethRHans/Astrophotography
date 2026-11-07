@@ -161,23 +161,36 @@ def correct_background(linear, strength=0, model=None):
     return image
 
 
+def adjust_sky(image,amount=0):
+    """Display shadow adjustment; bright stars receive progressively less change."""
+    if amount==0:return image
+    light=image @ np.array([.2126,.7152,.0722],dtype=np.float32)
+    weight=np.clip((.6-light)/.6,0,1)**2
+    return np.clip(image+np.float32(amount*.25)*weight[...,None],0,1)
+
+
+def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+    image=correct_background(linear,gradient,model)
+    valid=(linear>0).all(axis=-1)
+    sample=image[valid]
+    if not sample.size:return np.zeros_like(image),valid
+    floor=np.percentile(sample,black,axis=0)
+    image=np.maximum(image-floor,0)
+    image*=np.asarray(gains,dtype=np.float32)
+    white=max(float(np.percentile(image[valid],99.9)),1e-12)
+    return np.clip(image/white,0,1),valid
+
+
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, model=None, gpu=None):
-    image = correct_background(linear, gradient, model)
-    valid = (linear > 0).all(axis=-1)
-    sample = image[valid]
-    if not sample.size:
-        return np.zeros_like(image)
-    floor = np.percentile(sample, black, axis=0)
-    image = np.maximum(image-floor, 0)
-    image *= np.asarray(gains, dtype=np.float32)
-    white = max(float(np.percentile(image[valid], 99.9)), 1e-12)
-    image = np.clip(image/white, 0, 1)
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, model=None, gpu=None,normalization=None):
+    image,valid=normalization if normalization is not None else normalize_image(linear,black,gradient,gains,model)
+    if not np.any(valid):return np.zeros_like(image)
     if gpu is not None and not gpu.disabled:
         try:
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
             if not np.isfinite(result).all():
                 raise RuntimeError('GPU returned nonfinite pixels')
+            result=adjust_sky(result,sky)
             result[~valid] = 0
             return result
         except Exception as exc:
@@ -191,6 +204,7 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
     if brightness != 0 or contrast != 1:
         image = np.clip((image*(2.**brightness)-.18)*contrast+.18,0,1)
+    image=adjust_sky(image,sky)
     image[~valid] = 0
     return image
 

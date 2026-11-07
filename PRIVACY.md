@@ -1,6 +1,6 @@
 # Easy Astro Studio Privacy Policy
 
-**Effective date: November 4, 2026**
+**Effective date: November 7, 2026**
 
 Easy Astro Studio is a Windows desktop application published by **Astrivanta**.
 This policy explains how information is handled when you use the application,
@@ -21,8 +21,8 @@ state and references to original file paths. Exports and projects stay where you
 save them. If you share those files yourself, their contents and metadata may be
 visible to the recipient.
 
-The app saves interface preferences, such as your theme, locally under your
-Windows user account. It uses temporary disk files during stacking and normally
+The app saves interface preferences, such as your theme, GPU preference and last selected FITS folder, locally under
+your Windows user account. It uses temporary disk files during stacking and normally
 removes them when processing ends. An interruption or system crash may leave
 temporary files on your device. Uninstalling the app does not necessarily remove
 images, projects or exports you saved in your own folders.

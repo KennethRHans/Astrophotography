@@ -1,5 +1,6 @@
 """Optional OpenCL image adjustments. No driver or GPU is required for CPU use."""
 import numpy as np
+import threading
 
 SOURCE = r'''
 __kernel void stretch_image(__global const float *src, __global float *dst,
@@ -45,6 +46,7 @@ class GpuProcessor:
         import pyopencl as cl
         import pyopencl.invoker  # OpenCL extension imports this dynamically; include it in the frozen app.
         self.cl = cl
+        self._process_lock=threading.RLock()
         if context is None:
             devices = []
             try:
@@ -66,7 +68,10 @@ class GpuProcessor:
         self.blur_kernel = cl.Kernel(program, 'blur_image')
         self.color_kernel = cl.Kernel(program, 'color_image')
 
-    def process(self, image, stretch, saturation, denoise, brightness=0, contrast=1):
+    def process(self,image,stretch,saturation,denoise,brightness=0,contrast=1):
+        with self._process_lock:return self._process(image,stretch,saturation,denoise,brightness,contrast)
+
+    def _process(self, image, stretch, saturation, denoise, brightness=0, contrast=1):
         cl = self.cl
         source = np.ascontiguousarray(image, dtype=np.float32)
         h, w, _ = source.shape

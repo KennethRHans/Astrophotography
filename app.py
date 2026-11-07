@@ -1,6 +1,7 @@
 import sys
 import copy
 import json
+import time
 from pathlib import Path
 import numpy as np
 import cv2
@@ -15,6 +16,7 @@ from feedback import FeedbackDialog
 from app_version import VERSION
 from themes import THEMES,apply_theme
 from frame_review import FrameReviewDialog
+from preview_render import PreviewRenderer,PreviewWorker
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 
@@ -30,6 +32,15 @@ class Worker(QtCore.QThread):
         self.use_gpu = use_gpu
     def run(self):
         try:
+            times={'message':0.,'progress':0.,'stage':None}
+            def message(text):
+                now=time.monotonic()
+                if text.startswith('Combining rows') and now-times['message']<.12:return
+                times['message']=now;self.message.emit(text)
+            def progress(done,total,stage):
+                now=time.monotonic()
+                if stage==times['stage'] and done<total and now-times['progress']<.05:return
+                times['stage']=stage;times['progress']=now;self.progress.emit(done,total,stage)
             gpu = None
             if self.use_gpu and not self.single:
                 try:
@@ -38,7 +49,7 @@ class Worker(QtCore.QThread):
                     self.message.emit('GPU row combining enabled: '+gpu.name)
                 except Exception as exc:
                     self.message.emit('GPU combining unavailable; using bounded CPU chunks: '+str(exc))
-            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, self.message.emit, self.isInterruptionRequested, self.progress.emit, gpu=gpu)
+            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, message, self.isInterruptionRequested, progress, gpu=gpu)
             self.result.emit(*result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -64,6 +75,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.source_paths=[]
+        self.preview_renderer=PreviewRenderer();self.preview_worker=None;self._preview_generation=0;self._preview_pending=False;self._close_after_preview=False;self._files_json=None
         self.setWindowTitle('Easy Astro Studio • Version '+VERSION)
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
@@ -153,7 +165,7 @@ class Window(W.QMainWindow):
         self.sliders = {}
         self.slider_rows = {}
         self.slider_defaults = {}
-        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
+        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Sky background %', -100, 100, 0), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
             sidebar.addWidget(W.QLabel(label))
             row = SliderValueRow(low,high,default); sidebar.addWidget(row)
             slider = row.slider; self.sliders[label] = slider; self.slider_rows[label] = row
@@ -161,7 +173,8 @@ class Window(W.QMainWindow):
             slider.valueChanged.connect(self.schedule_preview)
             slider.sliderPressed.connect(self.commit_history)
             slider.sliderReleased.connect(self.commit_history)
-        hint = W.QLabel('Background correction can remove faint extended nebulosity.\nStart low and compare. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
+            slider.sliderReleased.connect(self.schedule_preview)
+        hint = W.QLabel('Sky background: negative darkens shadows; positive lightens them. Darkening can hide faint nebulosity. Background correction can also suppress faint signal. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.reset = W.QPushButton('Reset adjustments')
         self.reset.setToolTip('Restore all sliders to their starting values')
@@ -222,17 +235,18 @@ class Window(W.QMainWindow):
         self.mark_clipping=W.QCheckBox('Mark clipped pixels in preview (blue: black, red: white)')
         self.mark_clipping.toggled.connect(self.schedule_preview);hist_layout.addWidget(self.mark_clipping)
         self.histogram_panel.hide();right.addWidget(self.histogram_panel)
-        self.log = W.QPlainTextEdit(); self.log.setReadOnly(True); right.addWidget(self.log, 1)
-        self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
+        self.log = W.QPlainTextEdit(); self.log.setMaximumBlockCount(2000); self.log.setReadOnly(True); right.addWidget(self.log, 1)
+        self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.request_preview)
         self.history_timer=QtCore.QTimer();self.history_timer.setSingleShot(True);self.history_timer.timeout.connect(self.commit_history)
         toolbar=self.addToolBar('Projects and history');toolbar.setMovable(False)
+        self.new_project_action=QtGui.QAction('New project',self);self.new_project_action.setShortcut('Ctrl+N');self.new_project_action.triggered.connect(lambda:self.new_project())
         self.open_project_action=QtGui.QAction('Open project…',self);self.open_project_action.setShortcut('Ctrl+O');self.open_project_action.triggered.connect(self.open_project_dialog)
         self.save_project_action=QtGui.QAction('Save project',self);self.save_project_action.setShortcut('Ctrl+S');self.save_project_action.triggered.connect(self.save_project_dialog)
         self.save_as_action=QtGui.QAction('Save project as…',self);self.save_as_action.setShortcut('Ctrl+Shift+S');self.save_as_action.triggered.connect(lambda: self.save_project_dialog(save_as=True))
         self.undo_action=QtGui.QAction('Undo',self);self.undo_action.setShortcut('Ctrl+Z');self.undo_action.triggered.connect(self.undo_edit)
         self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(['Ctrl+Y','Ctrl+Shift+Z']);self.redo_action.triggered.connect(self.redo_edit)
-        for action in (self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
-        file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
+        for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
+        file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.new_project_action,self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
         community_layout = W.QVBoxLayout(self.community_panel); community_layout.setContentsMargins(10,8,10,8); community_layout.setSpacing(8)
@@ -264,6 +278,8 @@ class Window(W.QMainWindow):
         self.menuBar().addAction(self.about_action)
         self.update_actions()
         self.statusBar().showMessage('Ready • CPU processing • Originals are preserved')
+        for signal in (self.files.model().rowsInserted,self.files.model().rowsRemoved,self.files.model().modelReset,self.files.model().dataChanged,self.files.model().rowsMoved):signal.connect(self.invalidate_file_cache)
+        if self.settings_store.value('processing/use_gpu',False,type=bool):self.use_gpu.setChecked(True)
     def update_planner_banner(self):
         color=THEMES[self.theme_name]['link'];url=community_links.PLANNER_URL
         self.planner_banner.setText(f'Plan tonight\'s observing at <a style="color:{color}; text-decoration:underline" href="{url}">{url}</a>')
@@ -307,8 +323,55 @@ class Window(W.QMainWindow):
     def show_step(self, widget):
         position = widget.mapTo(self.sidebar_scroll.widget(), QtCore.QPoint(0, 0)).y()
         self.sidebar_scroll.verticalScrollBar().setValue(position)
+    def fits_folder(self):
+        folder=Path(str(self.settings_store.value('files/last_fits_directory','')))
+        if str(folder) not in ('','.'): 
+            while not folder.is_dir() and folder.parent!=folder:folder=folder.parent
+            if folder.is_dir():return str(folder)
+        return QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DocumentsLocation)
+
+    def remember_fits_folder(self,path):
+        self.settings_store.setValue('files/last_fits_directory',str(Path(path).parent));self.settings_store.sync()
+
+    def new_project(self,confirmed=False):
+        if self.worker is not None or self.project_worker is not None:return
+        self.commit_history()
+        if not confirmed and self._dirty and self.ask_on_close:
+            answer=W.QMessageBox.question(self,'Save project before starting a new one?',
+                'Save your current image and edits before starting a new project?',
+                W.QMessageBox.Save|W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Save)
+            if answer==W.QMessageBox.Cancel:return
+            if answer==W.QMessageBox.Save:
+                self.save_project_dialog(after_save=lambda:self.new_project(True));return
+        self.timer.stop();self.history_timer.stop();self._preview_generation+=1;self._preview_pending=False
+        self._history_ready=False
+        self.linear=self.header=self.rendered=None
+        self.original_linear=self.original_header=self.background=None
+        self.project_path=None;self.source_name='image';self.source_paths=[]
+        self.pending_source_paths=[];self.pending_source_name='image';self.files.clear()
+        self.history=EditHistory();self._saved_signature=None;self._dirty=False
+        self.applied_crop=(0,0,0,0);self.crop_bounds=(0,0,0,0)
+        for name,slider in self.sliders.items():
+            old=slider.blockSignals(True);slider.setValue(self.slider_defaults[name]);slider.blockSignals(old);self.slider_rows[name].position_value()
+        for widget,value in ((self.baseline,False),(self.mark_clipping,False),(self.crop_ratio,'Free'),(self.guides,'Thirds + rulers')):
+            old=widget.blockSignals(True)
+            if isinstance(value,bool):widget.setChecked(value)
+            else:widget.setCurrentText(value)
+            widget.blockSignals(old)
+        self.preview.item.setPixmap(QtGui.QPixmap());self.preview.source_size=None;self.preview.selection_pixels=None
+        self.preview.ratio=None;self.preview.mode=None;self.preview.guide=self.guides.currentText();self.preview.fit_mode=True
+        self.preview.scene().setSceneRect(QtCore.QRectF());self.preview.setTransform(QtGui.QTransform());self.preview.viewport().update();self.zoom_label.setText('Fit')
+        self.crop_group.setEnabled(False);self.crop_dimensions.setText('No image loaded')
+        self.step_adjust.setEnabled(False);self.step_export.setEnabled(False);self.export.setEnabled(False);self.next_adjust.setEnabled(False)
+        self.histogram_panel.hide();self.histogram.set_data(np.zeros((3,256),dtype=np.int64))
+        self.progress_bar.setRange(0,100);self.progress_bar.setValue(0);self.progress_text.setText('Ready for a new project')
+        self.log.clear();self.setWindowTitle(self.base_title)
+        if self.preview_worker is None:self.preview_renderer.clear()
+        self.update_actions();self.show_step(self.step_equipment)
+
     def add_files(self):
-        paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+        paths, _ = W.QFileDialog.getOpenFileNames(self, 'Select individual exposures', self.fits_folder(), 'FITS (*.fit *.fits *.FIT *.FITS)')
+        if paths:self.remember_fits_folder(paths[0])
         existing = {self.files.item(i).text() for i in range(self.files.count())}
         self.files.addItems([p for p in paths if p not in existing])
         self.update_actions()
@@ -322,8 +385,9 @@ class Window(W.QMainWindow):
     def start(self, single):
         if self.project_worker is not None:return
         if single:
-            path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', '', 'FITS (*.fit *.fits *.FIT *.FITS)')
+            path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', self.fits_folder(), 'FITS (*.fit *.fits *.FIT *.FITS)')
             if not path: return
+            self.remember_fits_folder(path)
             paths = [path]
         else:
             paths = [self.files.item(i).text() for i in range(self.files.count())]
@@ -385,6 +449,8 @@ class Window(W.QMainWindow):
         self._saved_signature=None if self.worker is not None and not self.worker.single else self.project_signature()
         self.update_actions()
     def toggle_gpu(self, enabled):
+        self.settings_store.setValue('processing/use_gpu',bool(enabled));self.settings_store.sync()
+        self._preview_generation+=1
         self.gpu = None
         if enabled:
             try:
@@ -481,33 +547,70 @@ class Window(W.QMainWindow):
         self.update_preview()
         self.commit_history()
     def schedule_preview(self):
-        self.timer.start(150)
+        self._preview_generation+=1;self._preview_pending=True
+        self.timer.start(45)
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1)
+        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
-                v['Brightness (stops ×100)']/100,v['Contrast %']/100)
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100)
+    def preview_request(self):
+        h,w,_=self.linear.shape
+        scale=max(self.preview.transform().m11(),.01)
+        if self.preview.item.pixmap().isNull():scale=min(self.preview.viewport().width()/w,self.preview.viewport().height()/h)
+        step=max(1,int(np.floor(1/max(scale,.01))))
+        size=(max(1,w//step),max(1,h//step))
+        if any(slider.isSliderDown() for slider in self.sliders.values()):
+            factor=max(1,max(size)/1280);size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
+        return self.linear,size,self.settings(),self.background,self.gpu,self.mark_clipping.isChecked()
+
     def update_preview(self):
-        if self.linear is None: return
-        # Interactive display is reduced; export always renders at native resolution.
-        step = max(1, int(np.floor(1/max(self.preview.transform().m11(), .01))))
-        small = cv2.resize(self.linear, (max(1, self.linear.shape[1]//step), max(1, self.linear.shape[0]//step)), interpolation=cv2.INTER_AREA)
-        preview = engine.render(small, *self.settings(), model=self.background, gpu=self.gpu)
+        # Initial load and explicit crop/reset operations keep their immediate
+        # behavior. Slider/timer work uses the asynchronous path below.
+        if self.linear is None:return
+        self._preview_generation+=1;self._preview_pending=False
+        self.apply_preview(self.preview_renderer.render(*self.preview_request()))
         self.report_gpu_failure()
-        valid=(small>0).all(axis=-1)
-        bins,black,white=histogram_data(preview,valid)
-        self.histogram.set_data(bins)
+
+    def request_preview(self):
+        self.timer.stop()
+        if self.linear is None or self._close_after_preview or self.project_worker is not None:return
+        self._preview_pending=True
+        if self.preview_worker is not None:return
+        self._preview_pending=False
+        self.preview_worker=PreviewWorker(self.preview_renderer,self._preview_generation,self.preview_request())
+        self.preview_worker.result.connect(self.preview_ready)
+        self.preview_worker.failed.connect(self.preview_failed)
+        self.preview_worker.finished.connect(self.preview_finished)
+        self.preview_worker.start()
+
+    def preview_ready(self,generation,result):
+        same_source=self.linear is not None and self.preview_worker is not None and self.preview_worker.request[0] is self.linear
+        if same_source and not self._close_after_preview and (generation==self._preview_generation or any(slider.isSliderDown() for slider in self.sliders.values())):
+            self.apply_preview(result);self.report_gpu_failure()
+
+    def preview_failed(self,generation,text):
+        if generation==self._preview_generation:self.log.appendPlainText('Preview failed: '+text)
+
+    def preview_finished(self):
+        self.preview_worker.deleteLater();self.preview_worker=None
+        if self.linear is None:self.preview_renderer.clear()
+        if self._close_after_preview:
+            self._preview_pending=False;QtCore.QTimer.singleShot(0,self.close)
+        elif self._preview_pending:self.request_preview()
+
+    def apply_preview(self,result):
+        self._displayed_preview_settings=result['settings']
+        self.histogram.set_data(result['bins']);black,white=result['black'],result['white']
         self.clip_summary.setText(f'Black clipping: {black:.3f}% • White clipping: {white:.3f}% (preview)')
         self._clipping_warning=max(black,white)>.1
         self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
-        pixels = np.ascontiguousarray(np.round(preview*255).astype(np.uint8))
-        if self.mark_clipping.isChecked():
-            pixels[np.any(preview<=0,axis=-1)&valid]=(45,105,255)
-            pixels[np.any(preview>=1,axis=-1)&valid]=(255,65,65)
-        image = QtGui.QImage(pixels.data, pixels.shape[1], pixels.shape[0], pixels.strides[0], QtGui.QImage.Format_RGB888).copy()
-        self.preview.set_image(image,(self.linear.shape[1],self.linear.shape[0]))
+        pixels=result['pixels']
+        image=QtGui.QImage(pixels.data,pixels.shape[1],pixels.shape[0],pixels.strides[0],QtGui.QImage.Format_RGB888).copy()
+        self.preview.set_image(image,result['source_size'])
+
     def save(self):
         folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
         dialog = W.QFileDialog(self, 'Export (FITS saves linear data)', folder)
@@ -530,8 +633,10 @@ class Window(W.QMainWindow):
     def edit_state(self):
         return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},compare=self.baseline.isChecked(),
                     applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
+    def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
-        return json.dumps(dict(state=self.edit_state(),input_files=[self.files.item(i).text() for i in range(self.files.count())],bayer=self.bayer.currentText()),sort_keys=True)
+        if self._files_json is None:self._files_json=json.dumps([self.files.item(i).text() for i in range(self.files.count())])
+        return json.dumps(dict(state=self.edit_state(),bayer=self.bayer.currentText()),sort_keys=True)+'|'+self._files_json
     def schedule_history(self):
         if self._history_ready and not self._restoring:
             if self.preview.mode is not None or any(slider.isSliderDown() for slider in self.sliders.values()):self.history_timer.stop()
@@ -551,7 +656,7 @@ class Window(W.QMainWindow):
         self.undo_action.setEnabled(ready and not busy and (self.history.can_undo or pending))
         self.redo_action.setEnabled(ready and not busy and self.history.can_redo and not pending)
         self.save_project_action.setEnabled(ready and not busy);self.save_as_action.setEnabled(ready and not busy)
-        self.open_project_action.setEnabled(not busy)
+        self.open_project_action.setEnabled(not busy);self.new_project_action.setEnabled(not busy)
         if ready:
             self._dirty=self.project_signature()!=self._saved_signature
             name=Path(self.project_path).name if self.project_path else engine.export_basename(self.header,self.source_name)
@@ -618,6 +723,7 @@ class Window(W.QMainWindow):
     def _start_project_io(self,path,payload):
         if self.worker is not None or self.project_worker is not None:return
         self.timer.stop();self.history_timer.stop();self.preview.mode=None
+        self._preview_generation+=1;self._preview_pending=False
         self.project_worker=ProjectWorker(str(path),payload)
         self._project_io_path=str(path)
         self._project_io_ok=False
@@ -633,6 +739,7 @@ class Window(W.QMainWindow):
     def _project_opened(self,payload):
         try:
             linear,header,meta=payload
+            for state in [meta['state'],*meta.get('history',{}).get('states',[])]:state['sliders'].setdefault('Sky background %',0)
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
             self.loaded(linear,header)
@@ -646,7 +753,9 @@ class Window(W.QMainWindow):
             else:self.history.reset(self.edit_state())
             view=meta.get('view',{})
             self.mark_clipping.setChecked(bool(view.get('mark_clipping',False)))
-            self.use_gpu.setChecked(bool(view.get('gpu',False)))
+            # An older saved project can seed the preference on first use,
+            # but never override an explicit saved application preference.
+            if not self.settings_store.contains('processing/use_gpu') and view.get('gpu',False):self.use_gpu.setChecked(True)
             self.update_preview()
             if view.get('fit',True):self.preview.fit_image()
             else:
@@ -670,18 +779,22 @@ class Window(W.QMainWindow):
         self.update_actions()
         callback=self._after_io;self._after_io=None
         if callback:QtCore.QTimer.singleShot(0,callback)
+        elif self.linear is not None:self.schedule_preview()
     def closeEvent(self, event):
         if self.project_worker is not None:
             self.log.appendPlainText('Project save/load is in progress. Close again after it finishes.');event.ignore();return
         if self.worker and self.worker.isRunning():
             self.worker.requestInterruption();self.log.appendPlainText('Cancelling. Close again after processing stops.');event.ignore();return
         self.commit_history()
-        if self._dirty and self.ask_on_close:
+        if self._dirty and self.ask_on_close and not self._close_after_preview:
             result=W.QMessageBox.question(self,'Save project before closing?','Save your image and editing state as a project before closing?',W.QMessageBox.Save|W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Save)
             if result==W.QMessageBox.Cancel:event.ignore();return
             if result==W.QMessageBox.Save:
                 event.ignore();self.save_project_dialog(after_save=self.close);return
-        event.accept()
+        self.timer.stop();self._preview_pending=False
+        if self.preview_worker is not None:
+            self._close_after_preview=True;self.setEnabled(False);event.ignore();return
+        self._close_after_preview=False;self.setEnabled(True);event.accept()
 
 if __name__ == '__main__':
     from windows_identity import configure_taskbar_identity,has_package_identity
@@ -753,6 +866,11 @@ if __name__ == '__main__':
             review.start_analysis();wait_review();assert len(review.records)==2
             review.close()
 
+        deadline=time.monotonic()+30
+        while (window.preview_worker is not None or window.timer.isActive()) and time.monotonic()<deadline:
+            app.processEvents();time.sleep(.01)
+        assert window.preview_worker is None,'Preview worker timed out'
+        window.new_project();assert window.linear is None and window.files.count()==0 and window.preview.item.pixmap().isNull()
         if '--require-package-identity' in sys.argv:assert has_package_identity(),'Expected MSIX package identity'
         if '--smoke-result' in sys.argv:
             destination=Path(sys.argv[sys.argv.index('--smoke-result')+1])
