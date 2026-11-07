@@ -756,7 +756,7 @@ if __name__ == '__main__':
             metal.MTLCreateSystemDefaultDevice.restype = ctypes.c_void_p
             if metal.MTLCreateSystemDefaultDevice():
                 window.use_gpu.setChecked(True)
-                assert window.gpu is not None and window.use_gpu.isChecked(), 'Bundled Metal backend failed'
+                assert window.gpu is not None and window.use_gpu.isChecked(), 'Bundled Metal backend failed: '+window.log.toPlainText()
                 reference = engine.render(sample, *window.settings())
                 accelerated = engine.render(sample, *window.settings(), gpu=window.gpu)
                 assert not window.gpu.disabled, window.gpu.last_error

@@ -81,8 +81,10 @@ jobs:
             python scripts/build_macos.py 2>&1 | tee work/macos-build.log
           fi
       - name: Test bundled app with native Qt platform
+        shell: bash
         run: |
-          python - <<'PY'
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee work/macos-smoke.log
           import json
           import subprocess
           from pathlib import Path
@@ -103,6 +105,26 @@ jobs:
           subprocess.run(command, check=True, timeout=180)
           result.write_text(json.dumps(dict(ok=True, variant=variant)))
           PY
+      - name: Summarize packaged failures
+        if: failure()
+        id: packaged_diagnostics
+        run: |
+          python - <<'PYCODE'
+          import os
+          from pathlib import Path
+          lines = []
+          for name in ('work/macos-build.log', 'work/macos-smoke.log'):
+              path = Path(name)
+              if path.exists():
+                  lines += path.read_text().splitlines()
+          selected = [line for line in lines if 'Error:' in line or 'Using CPU:' in line or 'ERROR:' in line or 'Traceback' in line]
+          summary = ' | '.join(selected)[-1800:]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('summary=' + summary + '\n')
+          PYCODE
+      - name: "Packaged diagnostics: ${{ steps.packaged_diagnostics.outputs.summary }}"
+        if: failure()
+        run: echo "See build diagnostics for full logs."
       - name: Archive app preserving bundle permissions
         run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-${{ matrix.variant }}.zip
       - name: Upload build diagnostics
