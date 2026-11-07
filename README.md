@@ -46,7 +46,14 @@ with the UI heartbeat continuing through the render and the latest settings
 shown correctly. This is a UI responsiveness check, not a Windows/RTX 5070
 stacking-speed guarantee. A shared OpenCL processor also passed concurrent
 background-preview/export numeric comparisons on software OpenCL.
-Windows Store package validation is in progress for version 1.1.0.0.
+Windows tests, packaged application smoke checks, MakePRI/MakeAppx validation,
+archive identity checks and installation/activation with the exact Microsoft
+Store identity passed for version 1.1.0.0.
+
+[Download the 1.1.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42398766275/artifacts/13584538658).
+Extract it and upload `EasyAstroStudio-1.1.0-x64-Store-UNSIGNED.msix` to the
+Packages page of the next Partner Center submission. Microsoft signs accepted
+Store packages. This source package is intended for Store upload.
 
 ## Privacy policy (1.0.1)
 
