@@ -22,7 +22,17 @@ limit. No extra data is uploaded by this fix and the privacy policy is unchanged
 The 1.3.1 loaded-image preview and offline-default fixes are included.
 Authenticated live-service status has not been verified during development;
 the reported submission could not be retrieved through the available web tool.
-Windows package validation is in progress for version 1.3.2.0.
+All 78 local tests passed, including queued empty/null job lists with both
+unset and completed preprocessing timestamps, later job assignment, pending
+placeholders alongside a failed job, and explicit processing/solver failures.
+Windows tests, packaged application smoke checks, MSIX validation and exact
+Microsoft Store identity installation/activation passed for 1.3.2.0.
+
+[Download the 1.3.2 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42495966507/artifacts/13624095378).
+Extract and upload `EasyAstroStudio-1.3.2-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. First test the corrected
+online polling in the Windows installer with your own API key. The live status
+of the user's submission was not accessible during development.
 
 ## Identification image context and offline default (1.3.1)
 
