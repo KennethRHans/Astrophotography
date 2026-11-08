@@ -49,8 +49,16 @@ No live authenticated solve or private user-data upload was performed during
 development. All 66 local tests passed, including sky projection through
 rotation/mirroring/SIP, real-catalog matching, source extraction, HTTPS request
 encoding, redacted errors, opt-in, cancellation, duplicate handling and project
-reopening. The application smoke test also passed. Full Windows package
-validation is in progress for 1.3.0.0.
+reopening. Windows tests, packaged offline-identification smoke checks,
+MakePRI/MakeAppx validation, archive identity verification and installation/
+activation with the exact Microsoft Store identity passed for 1.3.0.0.
+
+[Download the 1.3.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42448053530/artifacts/13604925977).
+Extract it and upload `EasyAstroStudio-1.3.0-x64-Store-UNSIGNED.msix` to the
+next Partner Center submission. Microsoft signs accepted packages. This
+unsigned package is for Store upload, not direct installation. Test online
+solving with your own Astrometry.net API key before submitting; authenticated
+live-service availability was not verified during development.
 
 ## Labels, image opening and stack completion (1.2.0)
 
