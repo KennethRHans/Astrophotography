@@ -134,3 +134,20 @@ pixels and linear FITS exports are preserved. Preview and rendered exports use
 the same curve after CPU or GPU adjustments. The control participates in reset,
 undo, redo and project storage; older projects open with a neutral sky setting.
 The small final curve runs on CPU with either rendering backend.
+
+## Project and exposure-review toolbar
+
+New Project appears immediately before Open project (also File → New Project,
+Command-N). It prompts to Save, Discard or Cancel unsaved image edits. A save
+must succeed before the project clears; cancelling the save dialog or a failed
+save keeps the current work. A list of unprocessed exposures gets a separate
+Discard/Cancel prompt. New Project retains theme, GPU and FITS-folder preferences.
+
+Preview / rate exposures is also on the toolbar. If no exposures are listed, it
+first opens the exposure picker. The same review dialog remains under Step 2,
+below Remove selected. Review offers preview/full resolution, zoom/pan, batch
+star detection, approximate FWHM, elongation, relative scoring within comparable
+groups, sorting, highest-score selection, cancellation and Use as reference.
+Using a reference moves that exposure to the first position without removing
+other exposures or replacing the edited main image. Review analysis does not
+automatically reject or remove exposures; use Remove selected in the main list.

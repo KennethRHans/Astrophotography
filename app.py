@@ -232,13 +232,15 @@ class Window(W.QMainWindow):
         self.timer = QtCore.QTimer(); self.timer.setSingleShot(True); self.timer.timeout.connect(self.update_preview)
         self.history_timer=QtCore.QTimer();self.history_timer.setSingleShot(True);self.history_timer.timeout.connect(self.commit_history)
         toolbar=self.addToolBar('Projects and history');toolbar.setMovable(False)
+        self.new_project_action=QtGui.QAction('New Project',self);self.new_project_action.setShortcut(QtGui.QKeySequence.StandardKey.New);self.new_project_action.triggered.connect(self.new_project)
+        self.exposure_review_action=QtGui.QAction('Preview / rate exposures…',self);self.exposure_review_action.triggered.connect(self.open_exposure_review)
         self.open_project_action=QtGui.QAction('Open project…',self);self.open_project_action.setShortcut(QtGui.QKeySequence.StandardKey.Open);self.open_project_action.triggered.connect(self.open_project_dialog)
         self.save_project_action=QtGui.QAction('Save project',self);self.save_project_action.setShortcut(QtGui.QKeySequence.StandardKey.Save);self.save_project_action.triggered.connect(self.save_project_dialog)
         self.save_as_action=QtGui.QAction('Save project as…',self);self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs);self.save_as_action.triggered.connect(lambda: self.save_project_dialog(save_as=True))
         self.undo_action=QtGui.QAction('Undo',self);self.undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo);self.undo_action.triggered.connect(self.undo_edit)
         self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(QtGui.QKeySequence.keyBindings(QtGui.QKeySequence.StandardKey.Redo));self.redo_action.triggered.connect(self.redo_edit)
-        for action in (self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
-        file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.open_project_action,self.save_project_action,self.save_as_action])
+        for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action,self.exposure_review_action):toolbar.addAction(action)
+        file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.new_project_action,self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
         community_layout = W.QVBoxLayout(self.community_panel); community_layout.setContentsMargins(10,8,10,8); community_layout.setSpacing(8)
@@ -287,6 +289,11 @@ class Window(W.QMainWindow):
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
             '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>'
             '<p><a href="'+community_links.PRIVACY_URL+'">Privacy Policy</a> · Privacy contact: starsandfits@gmail.com</p>')
+
+    def open_exposure_review(self):
+        if self.worker is not None or self.project_worker is not None:return
+        if not self.files.count():self.add_files()
+        if self.files.count():self.review_exposures()
 
     def review_exposures(self):
         if self.worker is not None or self.project_worker is not None or not self.files.count():return
@@ -401,7 +408,7 @@ class Window(W.QMainWindow):
         self.export.setEnabled(True)
         self.step_adjust.setEnabled(True); self.step_export.setEnabled(True)
         self.next_adjust.setEnabled(True)
-        QtCore.QTimer.singleShot(0, lambda: self.show_step(self.step_adjust))
+        QtCore.QTimer.singleShot(0, lambda: self.show_step(self.step_adjust) if self.linear is not None else None)
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
         self.log.appendPlainText(engine.image_summary(linear, header))
@@ -584,6 +591,8 @@ class Window(W.QMainWindow):
         self.redo_action.setEnabled(ready and not busy and self.history.can_redo and not pending)
         self.save_project_action.setEnabled(ready and not busy);self.save_as_action.setEnabled(ready and not busy)
         self.open_project_action.setEnabled(not busy)
+        self.new_project_action.setEnabled(not busy)
+        self.exposure_review_action.setEnabled(not busy)
         if ready:
             self._dirty=self.project_signature()!=self._saved_signature
             name=Path(self.project_path).name if self.project_path else engine.export_basename(self.header,self.source_name)
@@ -618,6 +627,50 @@ class Window(W.QMainWindow):
     def redo_edit(self):
         self.commit_history()
         if self.history.can_redo:self.apply_edit_state(self.history.redo())
+    def new_project(self):
+        if self.worker is not None or self.project_worker is not None:return
+        self.commit_history()
+        if self._dirty and self.ask_on_close:
+            choice=W.QMessageBox.question(self,'New Project','Save the current project before starting a new one?',
+                W.QMessageBox.Save|W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Save)
+            if choice==W.QMessageBox.Cancel:return
+            if choice==W.QMessageBox.Save:
+                self.save_project_dialog(after_save=self._clear_project)
+                return
+        elif self.linear is None and self.files.count() and self.ask_on_close:
+            if W.QMessageBox.question(self,'New Project','Clear the current exposure list?',
+                    W.QMessageBox.Discard|W.QMessageBox.Cancel,W.QMessageBox.Cancel)!=W.QMessageBox.Discard:return
+        self._clear_project()
+
+    def _clear_project(self):
+        self.timer.stop();self.history_timer.stop();self._history_ready=False
+        self.linear=self.header=self.rendered=None
+        self.original_linear=self.original_header=self.background=None
+        self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
+        self.source_paths=[];self.pending_source_paths=[];self.source_name='image';self.pending_source_name='image'
+        self.history=EditHistory();self.applied_crop=None;self.crop_bounds=None
+        self.files.clear()
+        for name,slider in self.sliders.items():
+            blocker=QtCore.QSignalBlocker(slider);slider.setValue(self.slider_defaults[name]);del blocker
+            self.slider_rows[name].position_value()
+        for widget,value in ((self.baseline,False),(self.mark_clipping,False),(self.crop_ratio,'Free'),(self.guides,'Thirds + rulers')):
+            blocker=QtCore.QSignalBlocker(widget)
+            if isinstance(value,bool):widget.setChecked(value)
+            else:widget.setCurrentText(value)
+            del blocker
+        self.preview.item.setPixmap(QtGui.QPixmap());self.preview.item.setTransform(QtGui.QTransform())
+        self.preview.source_size=None;self.preview.selection_pixels=None;self.preview.mode=None
+        self.preview.pan_start=None;self.preview.ratio=None;self.preview.guide=self.guides.currentText();self.preview.fit_mode=True
+        self.preview.resetTransform();self.preview.scene().setSceneRect(QtCore.QRectF());self.preview.viewport().update()
+        self.zoom_label.setText('Fit');self.crop_dimensions.setText('No image loaded');self.crop_group.setEnabled(False)
+        self.histogram.set_data(np.zeros((3,256),dtype=np.int64));self.histogram_panel.hide()
+        self.clip_summary.setText('Black clipping: 0% • White clipping: 0%');self._clipping_warning=False
+        self.step_adjust.setEnabled(False);self.step_export.setEnabled(False);self.export.setEnabled(False);self.next_adjust.setEnabled(False)
+        self.progress_bar.setRange(0,100);self.progress_bar.setValue(0);self.progress_text.setText('Ready')
+        self.log.clear();self.log.appendPlainText('New project. Select exposures or open an existing FITS stack.')
+        self.setWindowTitle(self.base_title);self.update_actions();self.show_step(self.step_load)
+        self.statusBar().showMessage('New project • '+('GPU adjustments enabled' if self.gpu is not None else 'CPU processing'))
+
     def allow_replace(self):
         self.commit_history()
         if not self._dirty or not self.ask_on_close:return True
@@ -834,6 +887,14 @@ if __name__ == '__main__':
             wait_review();assert not review.view.item.pixmap().isNull()
             review.start_analysis();wait_review();assert len(review.records)==2
             review.close()
+
+        window.new_project()
+        app.processEvents()
+        assert window.linear is None and window.files.count()==0
+        assert not window.save_project_action.isEnabled() and not window.undo_action.isEnabled()
+        assert window.exposure_review_action.isEnabled()
+        project_actions=window.findChild(W.QToolBar).actions()
+        assert project_actions.index(window.new_project_action)+1==project_actions.index(window.open_project_action)
 
         if '--require-package-identity' in sys.argv:assert has_package_identity(),'Expected MSIX package identity'
         if '--smoke-result' in sys.argv:
