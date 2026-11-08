@@ -1,8 +1,43 @@
-# Easy Astro Studio — 1.1.0 Store update
+# Easy Astro Studio — 1.2.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Labels, image opening and stack completion (1.2.0)
+
+The far-right **Labels & Objects…** toolbar button opens a manual annotation
+panel when an image is loaded. Choose Text, Arrow or Circle, enter a caption,
+color and text size, then choose Place on image and click the target. Select an
+entry to edit its appearance or remove it. Escape cancels placement. Show labels
+controls visibility. Labels follow original pixel coordinates through crop and
+restore, support undo/redo, and are saved in .astro projects. Old projects open
+with no labels. At most 500 annotations are supported. Automatic identification
+and plate solving are planned, not included in this release.
+
+**Open image or FITS stack…** accepts FIT/FITS, JPG/JPEG and PNG. Raster inputs
+honor EXIF orientation and open with neutral stretch/black settings. Their
+imported display-encoded RGB data is not linear sensor data. Default raster
+rendering preserves RGB values, including zero-valued channels. Bayer patterns
+apply only to 2D FITS. PNG/JPEG import and labeled export use 8-bit RGB; these
+are not archival high-bit-depth or color-managed workflows.
+
+Section 5 adds **Save stacked FITS…** for the full original aligned stack,
+including exposure metadata, without display adjustments, labels or cropping.
+It is enabled for FITS stacks with multiple exposures. Existing general FITS
+export still saves the current crop without display adjustments or labels.
+**Export labeled image…** saves a separate PNG/JPG with visible annotations
+at the current crop's full resolution. Original files and linear arrays are
+unchanged; normal exports remain free of annotations.
+
+Successful alignment/stacking reports combined and skipped exposure counts,
+requests taskbar attention and plays the Windows system notification sound.
+Settings offers **Play sound when stacking finishes**, saved per user. Opening
+a single image, failed operations and cancellation do not play the chime.
+System volume and sound-scheme settings control whether a sound is audible.
+This release needs no online solver, account or extra Store capabilities.
+
+Windows packaging and installation validation is in progress for version 1.2.0.0.
 
 ## Session tools, sky background and responsive previews (1.1.0)
 

@@ -43,6 +43,21 @@ def read_fits(path, bayer='Auto'):
 
 
 
+def read_image(path,bayer='Auto'):
+    if Path(path).suffix.lower() in ('.fit','.fits'):return read_fits(path,bayer)
+    from PIL import ImageOps
+    with Image.open(path) as source:
+        if source.format not in ('JPEG','PNG'):raise ValueError('Choose a FITS, JPG or PNG image.')
+        oriented=ImageOps.exif_transpose(source)
+        if 'A' in oriented.getbands() or 'transparency' in oriented.info:
+            rgba=oriented.convert('RGBA');base=Image.new('RGBA',rgba.size,(0,0,0,255));rgb=Image.alpha_composite(base,rgba).convert('RGB')
+        else:rgb=oriented.convert('RGB')
+        data=np.asarray(rgb,dtype=np.float32)/255
+    header=fits.Header({'OBJECT':Path(path).stem,'EASRASTR':True})
+    header.add_history('Imported display-encoded JPG/PNG; not linear sensor data.')
+    return data,header
+
+
 def frame_count(header):
     """Seestar uses STACKCNT; our stacks use NCOMBINE."""
     return max(int(header.get('STACKCNT', 1)), int(header.get('NCOMBINE', 1)))
@@ -170,6 +185,10 @@ def adjust_sky(image,amount=0):
 
 
 def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+    if isinstance(model,dict) and model.get('display_encoded'):
+        image=correct_background(linear,gradient,model['background'])
+        floor=np.percentile(image,black,axis=(0,1)) if black else 0
+        return np.clip((image-floor)*np.asarray(gains,dtype=np.float32),0,1),np.ones(linear.shape[:2],dtype=bool)
     image=correct_background(linear,gradient,model)
     valid=(linear>0).all(axis=-1)
     sample=image[valid]
@@ -309,7 +328,7 @@ def save(path, linear, rendered, header):
         hdr = header.copy()
         for key in ('BAYERPAT', 'XBAYROFF', 'YBAYROFF'):
             hdr.remove(key, ignore_missing=True, remove_all=True)
-        hdr.add_history('Saved linear RGB; axis 3 is R,G,B. Display adjustments not applied.')
+        hdr.add_history(('Saved display-encoded RGB imported from JPG/PNG.' if header.get('EASRASTR') else 'Saved linear RGB; axis 3 is R,G,B.')+' Display adjustments not applied.')
         fits.writeto(path, np.moveaxis(linear, -1, 0), hdr, overwrite=True)
     elif suffix in ('.tif', '.tiff'):
         tifffile.imwrite(path, np.round(rendered*65535).astype(np.uint16), photometric='rgb')

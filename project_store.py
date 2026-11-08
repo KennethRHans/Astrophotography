@@ -54,6 +54,9 @@ def validate_state(state,shape,slider_ranges=None):
     if type(state.get('compare')) is not bool:raise ValueError('Invalid comparison setting')
     for key in ('ratio','guides'):
         if not isinstance(state.get(key),str) or len(state[key])>100:raise ValueError('Invalid view setting')
+    from annotations import validate_annotations
+    validate_annotations(state.get('annotations',[]),shape)
+    if type(state.get('labels_visible',True)) is not bool:raise ValueError('Invalid label visibility')
     return state
 
 

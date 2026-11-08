@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
+from annotations import LabelsPanel,paint_annotations
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -49,7 +50,7 @@ class Worker(QtCore.QThread):
                     self.message.emit('GPU row combining enabled: '+gpu.name)
                 except Exception as exc:
                     self.message.emit('GPU combining unavailable; using bounded CPU chunks: '+str(exc))
-            result = engine.read_fits(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, message, self.isInterruptionRequested, progress, gpu=gpu)
+            result = engine.read_image(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, message, self.isInterruptionRequested, progress, gpu=gpu)
             self.result.emit(*result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -74,6 +75,7 @@ class Window(W.QMainWindow):
         self.history=EditHistory()
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
+        self.annotations=[];self.labels_visible=True
         self.source_paths=[]
         self.preview_renderer=PreviewRenderer();self.preview_worker=None;self._preview_generation=0;self._preview_pending=False;self._close_after_preview=False;self._files_json=None
         self.setWindowTitle('Easy Astro Studio • Version '+VERSION)
@@ -118,7 +120,7 @@ class Window(W.QMainWindow):
         scroll.setMinimumWidth(360); left_column.addWidget(scroll,1)
         self.sidebar_scroll = scroll
         instructions = W.QLabel('Instructions For Use:'); instructions.setStyleSheet('font-weight:bold; font-size:15px'); sidebar.addWidget(instructions)
-        intro = W.QLabel('1. Set Bayer Pattern (Equipment-based)\n2. Load FITS Stack or Multiple Files to Stack\n3. Align and Stack Exposures\n4. Adjust and Crop\n5. Export'); intro.setWordWrap(True); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
+        intro = W.QLabel('1. Set Bayer Pattern (Equipment-based)\n2. Load Image, FITS Stack or Multiple Files to Stack\n3. Align and Stack Exposures\n4. Adjust and Crop\n5. Export'); intro.setWordWrap(True); intro.setContentsMargins(12,0,0,6); sidebar.addWidget(intro)
         outer_sidebar = sidebar
         self.step_equipment=W.QGroupBox();self.step_equipment.setObjectName('stepEquipment');self.step_equipment.setAccessibleName('1. Set Bayer Pattern (Equipment-based)')
         outer_sidebar.addWidget(self.step_equipment);sidebar=W.QVBoxLayout(self.step_equipment)
@@ -133,11 +135,11 @@ class Window(W.QMainWindow):
         note = W.QLabel('The camera sensor and capture software determine the pattern, not the telescope optics. Auto reads BAYERPAT; a missing header produces grayscale. RGB stacks ignore this setting. Do not mix targets, sizes, or exposure settings.'); note.setWordWrap(True); sidebar.addWidget(note)
         next_load=W.QPushButton('Continue to step 2: Load files →');next_load.clicked.connect(lambda:self.show_step(self.step_load));sidebar.addWidget(next_load)
         outer_sidebar.addSpacing(20)
-        self.step_load=W.QGroupBox();self.step_load.setObjectName('stepLoad');self.step_load.setAccessibleName('2. Load FITS Stack or Multiple Files to Stack')
+        self.step_load=W.QGroupBox();self.step_load.setObjectName('stepLoad');self.step_load.setAccessibleName('2. Load Image, FITS Stack or Multiple Files to Stack')
         outer_sidebar.addWidget(self.step_load);sidebar=W.QVBoxLayout(self.step_load)
-        section_title=W.QLabel('2. Load FITS Stack or Multiple Files to Stack');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
-        load_hint=W.QLabel('Open an existing stack and continue to step 4, or add individual exposures for step 3.');load_hint.setWordWrap(True);sidebar.addWidget(load_hint)
-        self.open = W.QPushButton('Open existing FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
+        section_title=W.QLabel('2. Load Image, FITS Stack or Multiple Files to Stack');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
+        load_hint=W.QLabel('Open a JPG, PNG or existing FITS stack and continue to step 4, or add individual exposures for step 3.');load_hint.setWordWrap(True);sidebar.addWidget(load_hint)
+        self.open = W.QPushButton('Open image or FITS stack…'); self.open.clicked.connect(lambda: self.start(True)); sidebar.addWidget(self.open)
         or_label=W.QLabel('OR');or_label.setAlignment(QtCore.Qt.AlignCenter);or_label.setStyleSheet('font-weight:bold');sidebar.addWidget(or_label)
         self.add = W.QPushButton('Add exposures…'); self.add.clicked.connect(self.add_files); sidebar.addWidget(self.add)
         self.files = W.QListWidget(); self.files.setSelectionMode(W.QAbstractItemView.ExtendedSelection); sidebar.addWidget(self.files)
@@ -204,6 +206,8 @@ class Window(W.QMainWindow):
         section_title = W.QLabel('5. Export'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         export_hint = W.QLabel('Save the adjusted picture as TIFF, PNG or JPG, or keep linear data as FITS. Choose the format and filename in the save window.'); export_hint.setWordWrap(True); sidebar.addWidget(export_hint)
         self.export = W.QPushButton('5. Export image…'); self.export.setEnabled(False); self.export.clicked.connect(self.save); sidebar.addWidget(self.export)
+        self.save_stack_button=W.QPushButton('Save stacked FITS…');self.save_stack_button.setToolTip('Save the full original combined frame without crop, display adjustments or labels.');self.save_stack_button.clicked.connect(self.save_stacked_fits);sidebar.addWidget(self.save_stack_button)
+        self.export_labels_button=W.QPushButton('Export labeled image…');self.export_labels_button.clicked.connect(self.export_labeled_image);sidebar.addWidget(self.export_labels_button)
         right = W.QVBoxLayout(); layout.addLayout(right, 3)
         zoom_row = W.QHBoxLayout(); right.addLayout(zoom_row)
         self.zoom_out = W.QPushButton('−'); self.zoom_out.setFixedWidth(36); zoom_row.addWidget(self.zoom_out)
@@ -246,6 +250,13 @@ class Window(W.QMainWindow):
         self.undo_action=QtGui.QAction('Undo',self);self.undo_action.setShortcut('Ctrl+Z');self.undo_action.triggered.connect(self.undo_edit)
         self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(['Ctrl+Y','Ctrl+Shift+Z']);self.redo_action.triggered.connect(self.redo_edit)
         for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
+        spacer=W.QWidget();spacer.setSizePolicy(W.QSizePolicy.Expanding,W.QSizePolicy.Preferred);toolbar.addWidget(spacer)
+        self.labels_action=QtGui.QAction('Labels && Objects…',self);self.labels_action.setToolTip('Open an image to add labels');toolbar.addAction(self.labels_action)
+        self.labels_panel=LabelsPanel();self.labels_dock=W.QDockWidget('Labels && Objects',self);self.labels_dock.setWidget(self.labels_panel);self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.labels_dock);self.labels_dock.hide()
+        self.labels_action.triggered.connect(lambda:self.labels_dock.setVisible(not self.labels_dock.isVisible()))
+        self.labels_panel.place.connect(self.begin_label);self.preview.annotationPlaced.connect(self.place_label)
+        self.labels_panel.changed.connect(self.edit_label);self.labels_panel.remove.connect(self.remove_label);self.labels_panel.clear.connect(self.clear_labels)
+        self.labels_panel.visible.toggled.connect(self.set_labels_visible);self.labels_panel.list.currentRowChanged.connect(self.select_label)
         file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.new_project_action,self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
@@ -268,6 +279,8 @@ class Window(W.QMainWindow):
         community_layout.addWidget(self.planner_banner)
         root_layout.addWidget(self.community_panel)
         settings_menu=self.menuBar().addMenu('Settings');theme_menu=settings_menu.addMenu('Theme')
+        self.chime_action=QtGui.QAction('Play sound when stacking finishes',self);self.chime_action.setCheckable(True);self.chime_action.setChecked(self.settings_store.value('notifications/stack_sound',True,type=bool));settings_menu.addAction(self.chime_action)
+        self.chime_action.toggled.connect(self.save_chime_preference)
         self.privacy_action=QtGui.QAction('Privacy Policy',self);self.privacy_action.triggered.connect(lambda:self.open_community_link(community_links.PRIVACY_URL));settings_menu.addAction(self.privacy_action)
         self.theme_actions={};self.theme_group=QtGui.QActionGroup(self);self.theme_group.setExclusive(True)
         for name in THEMES:
@@ -345,6 +358,7 @@ class Window(W.QMainWindow):
                 self.save_project_dialog(after_save=lambda:self.new_project(True));return
         self.timer.stop();self.history_timer.stop();self._preview_generation+=1;self._preview_pending=False
         self._history_ready=False
+        self.annotations=[];self.labels_visible=True;self.refresh_labels();self.labels_dock.hide();self.preview.annotation_placing=False
         self.linear=self.header=self.rendered=None
         self.original_linear=self.original_header=self.background=None
         self.project_path=None;self.source_name='image';self.source_paths=[]
@@ -385,7 +399,7 @@ class Window(W.QMainWindow):
     def start(self, single):
         if self.project_worker is not None:return
         if single:
-            path, _ = W.QFileDialog.getOpenFileName(self, 'Open a finished stack', self.fits_folder(), 'FITS (*.fit *.fits *.FIT *.FITS)')
+            path, _ = W.QFileDialog.getOpenFileName(self, 'Open image or FITS stack', self.fits_folder(), 'Images (*.fit *.fits *.FIT *.FITS *.jpg *.jpeg *.png *.JPG *.JPEG *.PNG)')
             if not path: return
             self.remember_fits_folder(path)
             paths = [path]
@@ -400,7 +414,7 @@ class Window(W.QMainWindow):
         for control in (self.run, self.open, self.add, self.remove, self.bayer, self.use_gpu): control.setEnabled(False)
         self.cancel.setEnabled(True)
         self.progress_bar.setRange(0, 0)
-        self.progress_text.setText('Loading FITS image…' if single else 'Preparing exposures…')
+        self.progress_text.setText('Loading image…' if single else 'Preparing exposures…')
         self.worker = Worker(paths, self.bayer.currentText(), single, self.use_gpu.isChecked())
         self.worker.message.connect(self.log.appendPlainText)
         self.worker.progress.connect(self.update_progress)
@@ -428,6 +442,7 @@ class Window(W.QMainWindow):
         self.update_actions()
     def loaded(self, linear, header):
         self._history_ready=False
+        self.annotations=[];self.labels_visible=True;self.refresh_labels()
         self.project_path=None
         self.source_paths=list(getattr(self,'pending_source_paths',[]))
         self.applied_crop=(0,0,linear.shape[1],linear.shape[0])
@@ -435,13 +450,24 @@ class Window(W.QMainWindow):
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
         self.reset_crop_controls()
-        self.background = engine.background_model(linear)
+        self.background = self.make_background(linear)
+        for name,slider in self.sliders.items():
+            value=0 if header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name]
+            old=slider.blockSignals(True);slider.setValue(value);slider.blockSignals(old);self.slider_rows[name].position_value()
         self.export.setEnabled(True)
         self.step_adjust.setEnabled(True); self.step_export.setEnabled(True)
         self.next_adjust.setEnabled(True)
         QtCore.QTimer.singleShot(0, lambda: self.show_step(self.step_adjust))
         self.progress_bar.setRange(0, 100); self.progress_bar.setValue(100)
         self.progress_text.setText("Complete • 100% • 0 remaining")
+        if isinstance(self.worker,Worker) and not self.worker.single:
+            accepted=engine.frame_count(header);skipped=max(0,len(self.pending_source_paths)-accepted)
+            summary=f'Stacking complete: {accepted} exposures combined; {skipped} skipped.'
+            self.progress_text.setText(summary);self.log.appendPlainText(summary);self.statusBar().showMessage(summary)
+            W.QApplication.alert(self,0)
+            if self.chime_action.isChecked():
+                try:self.play_stack_chime()
+                except Exception as exc:self.log.appendPlainText('Completion sound unavailable: '+str(exc))
         self.log.appendPlainText(engine.image_summary(linear, header))
         self.histogram_panel.show()
         self.update_preview()
@@ -522,7 +548,7 @@ class Window(W.QMainWindow):
             W.QMessageBox.information(self, 'Adjust crop', str(exc)); return
         ox,oy,_,_=self.applied_crop
         self.applied_crop=(ox+x0,oy+y0,ox+x1,oy+y1)
-        self.background = engine.background_model(self.linear)
+        self.background = self.make_background(self.linear)
         self.reset_crop_controls()
         self.log.appendPlainText(f'Crop applied: {self.linear.shape[1]} × {self.linear.shape[0]} pixels. Restore full frame is available.')
         self.update_preview()
@@ -533,7 +559,7 @@ class Window(W.QMainWindow):
         self.commit_history()
         self.applied_crop=(0,0,self.original_linear.shape[1],self.original_linear.shape[0])
         self.linear, self.header = self.original_linear, self.original_header.copy()
-        self.background = engine.background_model(self.linear)
+        self.background = self.make_background(self.linear)
         self.reset_crop_controls()
         self.log.appendPlainText('Full frame restored. Adjustments preserved.')
         self.update_preview()
@@ -541,7 +567,7 @@ class Window(W.QMainWindow):
     def reset_adjustments(self):
         self.commit_history()
         for name, slider in self.sliders.items():
-            slider.setValue(self.slider_defaults[name])
+            slider.setValue(0 if self.header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name])
         self.baseline.setChecked(False)
         self.timer.stop()
         self.update_preview()
@@ -552,7 +578,7 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return (30,.1,1,0,0,(1,1,1),0,1,0)
+        if self.baseline.isChecked():return (0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
                 v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100)
@@ -610,6 +636,93 @@ class Window(W.QMainWindow):
         pixels=result['pixels']
         image=QtGui.QImage(pixels.data,pixels.shape[1],pixels.shape[0],pixels.strides[0],QtGui.QImage.Format_RGB888).copy()
         self.preview.set_image(image,result['source_size'])
+        self.refresh_label_overlay()
+
+    def make_background(self,image):
+        model=engine.background_model(image)
+        return dict(display_encoded=True,background=model) if self.header.get('EASRASTR') else model
+    def save_chime_preference(self,value):
+        self.settings_store.setValue('notifications/stack_sound',value);self.settings_store.sync()
+    def play_stack_chime(self):
+        if sys.platform=='win32':
+            import winsound
+            winsound.PlaySound('SystemAsterisk',winsound.SND_ALIAS|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
+        else:W.QApplication.beep()
+    def refresh_label_overlay(self):
+        if not hasattr(self,'preview'):return
+        self.preview.annotations=self.annotations;self.preview.annotations_visible=self.labels_visible
+        self.preview.annotation_crop=getattr(self,'applied_crop',(0,0,0,0))
+        if getattr(self,'original_linear',None) is not None:self.preview.annotation_width=self.original_linear.shape[1]
+        self.preview.viewport().update()
+    def refresh_labels(self):
+        if not hasattr(self,'labels_panel'):return
+        row=self.labels_panel.list.currentRow();self.labels_panel.list.blockSignals(True);self.labels_panel.list.clear()
+        self.labels_panel.list.addItems([f"{a['kind']}: {a['text'] or '(shape)'}" for a in self.annotations])
+        self.labels_panel.list.setCurrentRow(min(max(0,row),len(self.annotations)-1));self.labels_panel.list.blockSignals(False)
+        old=self.labels_panel.visible.blockSignals(True);self.labels_panel.visible.setChecked(self.labels_visible);self.labels_panel.visible.blockSignals(old)
+        self.refresh_label_overlay()
+    def begin_label(self):
+        if self.linear is None:return
+        if len(self.annotations)>=500:W.QMessageBox.information(self,'Labels','Maximum 500 labels per project.');return
+        if self.labels_panel.kind.currentText()=='Text' and not self.labels_panel.text.text().strip():
+            self.labels_panel.text.setFocus();return
+        self.preview.mode=None;self.preview.annotation_placing=True
+        self.statusBar().showMessage('Click the image to place the label. Escape cancels placement.')
+    def keyPressEvent(self,event):
+        if event.key()==QtCore.Qt.Key_Escape and self.preview.annotation_placing:
+            self.preview.annotation_placing=False;self.statusBar().showMessage('Label placement cancelled');event.accept();return
+        super().keyPressEvent(event)
+    def place_label(self,x,y):
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
+        self.commit_history();a=self.labels_panel.values();ox,oy,_,_=self.applied_crop
+        a.update(x=max(ox,min(ox+self.linear.shape[1]-1,x+ox)),y=max(oy,min(oy+self.linear.shape[0]-1,y+oy)))
+        self.annotations.append(a);self.labels_visible=True;self.refresh_labels();self.labels_panel.list.setCurrentRow(len(self.annotations)-1);self.commit_history()
+        self.statusBar().showMessage('Label added')
+    def select_label(self,row):
+        if not 0<=row<len(self.annotations):return
+        a=self.annotations[row];p=self.labels_panel
+        p.kind.setCurrentText(a['kind']);p.text.setText(a['text']);p.color.setCurrentIndex(p.color.findData(a['color']));p.size.setValue(a['size'])
+    def edit_label(self):
+        row=self.labels_panel.list.currentRow()
+        if not 0<=row<len(self.annotations):return
+        self.commit_history();self.annotations[row].update(self.labels_panel.values());self.refresh_labels();self.commit_history()
+    def remove_label(self):
+        row=self.labels_panel.list.currentRow()
+        if not 0<=row<len(self.annotations):return
+        self.commit_history();self.annotations.pop(row);self.refresh_labels();self.commit_history()
+    def clear_labels(self):
+        if not self.annotations:return
+        if W.QMessageBox.question(self,'Clear labels?','Remove all labels? You can undo this change.',W.QMessageBox.Yes|W.QMessageBox.No,W.QMessageBox.No)!=W.QMessageBox.Yes:return
+        self.commit_history();self.annotations=[];self.refresh_labels();self.commit_history()
+    def set_labels_visible(self,value):
+        self.commit_history();self.labels_visible=value;self.refresh_label_overlay();self.commit_history()
+    def save_stacked_fits(self):
+        if self.original_linear is None or not self.save_stack_button.isEnabled():return
+        initial=engine.export_basename(self.original_header,self.source_name)+'_stacked.fits'
+        path,_=W.QFileDialog.getSaveFileName(self,'Save full linear stack',initial,'FITS (*.fits)')
+        if not path:return
+        if Path(path).suffix.lower() not in ('.fit','.fits'):path+='.fits'
+        try:
+            engine.save(path,self.original_linear,None,self.original_header);self.log.appendPlainText('Saved full linear stack: '+path)
+        except Exception as exc:W.QMessageBox.critical(self,'Save stack failed',str(exc))
+    def labeled_image(self):
+        rendered=engine.render(self.linear,*self.settings(),model=self.background,gpu=self.gpu)
+        pixels=np.ascontiguousarray(np.round(rendered*255).astype(np.uint8));h,w=pixels.shape[:2]
+        image=QtGui.QImage(pixels.data,w,h,pixels.strides[0],QtGui.QImage.Format_RGB888).copy()
+        painter=QtGui.QPainter(image)
+        if self.labels_visible:paint_annotations(painter,self.annotations,self.applied_crop,self.original_linear.shape[1])
+        painter.end();return image
+    def export_labeled_image(self):
+        if self.linear is None:return
+        path,selected=W.QFileDialog.getSaveFileName(self,'Export labeled copy',engine.export_basename(self.header,self.source_name)+'_labeled.png','PNG (*.png);;JPEG (*.jpg)')
+        if not path:return
+        if not Path(path).suffix:path+='.jpg' if 'JPEG' in selected else '.png'
+        if Path(path).suffix.lower() not in ('.png','.jpg','.jpeg'):
+            W.QMessageBox.information(self,'Export labeled image','Choose PNG or JPG.');return
+        try:
+            if not self.labeled_image().save(path,quality=95):raise OSError('Could not write image')
+            self.log.appendPlainText('Saved labeled copy: '+path)
+        except Exception as exc:W.QMessageBox.critical(self,'Export labels failed',str(exc))
 
     def save(self):
         folder = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.PicturesLocation)
@@ -632,7 +745,7 @@ class Window(W.QMainWindow):
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
     def edit_state(self):
         return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},compare=self.baseline.isChecked(),
-                    applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
+                    annotations=copy.deepcopy(self.annotations),labels_visible=self.labels_visible,applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
     def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
         if self._files_json is None:self._files_json=json.dumps([self.files.item(i).text() for i in range(self.files.count())])
@@ -652,6 +765,10 @@ class Window(W.QMainWindow):
         self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
         ready=self.linear is not None and self._history_ready
+        self.labels_action.setEnabled(ready and not busy);self.labels_panel.setEnabled(ready and not busy)
+        if busy:self.preview.annotation_placing=False
+        self.save_stack_button.setEnabled(ready and not busy and not self.header.get('EASRASTR',False) and engine.frame_count(self.original_header)>1)
+        self.export_labels_button.setEnabled(ready and not busy and bool(self.annotations))
         pending=ready and self.edit_state()!=self.history.states[self.history.index]
         self.undo_action.setEnabled(ready and not busy and (self.history.can_undo or pending))
         self.redo_action.setEnabled(ready and not busy and self.history.can_redo and not pending)
@@ -672,7 +789,8 @@ class Window(W.QMainWindow):
             if rect!=self.applied_crop:
                 x0,y0,x1,y1=rect;h,w,_=self.original_linear.shape
                 self.linear,self.header=engine.crop_image(self.original_linear,self.original_header,x0,w-x1,y0,h-y1)
-                self.applied_crop=rect;self.background=engine.background_model(self.linear)
+                self.applied_crop=rect;self.background=self.make_background(self.linear)
+            self.annotations=copy.deepcopy(state.get('annotations',[]));self.labels_visible=state.get('labels_visible',True);self.refresh_labels()
             for name,value in state['sliders'].items():
                 widget=self.sliders[name];previous=widget.blockSignals(True);widget.setValue(value);widget.blockSignals(previous)
                 self.slider_rows[name].position_value()
@@ -722,7 +840,7 @@ class Window(W.QMainWindow):
     def open_project_path(self,path):self._after_io=None;self._start_project_io(path,None)
     def _start_project_io(self,path,payload):
         if self.worker is not None or self.project_worker is not None:return
-        self.timer.stop();self.history_timer.stop();self.preview.mode=None
+        self.timer.stop();self.history_timer.stop();self.preview.mode=None;self.preview.annotation_placing=False
         self._preview_generation+=1;self._preview_pending=False
         self.project_worker=ProjectWorker(str(path),payload)
         self._project_io_path=str(path)
@@ -739,7 +857,8 @@ class Window(W.QMainWindow):
     def _project_opened(self,payload):
         try:
             linear,header,meta=payload
-            for state in [meta['state'],*meta.get('history',{}).get('states',[])]:state['sliders'].setdefault('Sky background %',0)
+            for state in [meta['state'],*meta.get('history',{}).get('states',[])]:
+                state['sliders'].setdefault('Sky background %',0);state.setdefault('annotations',[]);state.setdefault('labels_visible',True)
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
             self.loaded(linear,header)
@@ -844,6 +963,10 @@ if __name__ == '__main__':
             from PIL import Image
             with Image.open(output) as exported:
                 assert exported.format=='JPEG'
+            raster,raster_header=engine.read_image(output);assert raster_header['EASRASTR'] and raster.shape==window.linear.shape
+            window.labels_panel.text.setText('Test target');window.place_label(30,25)
+            assert window.labeled_image().save(str(Path(folder)/'labeled.png'))
+            assert window.annotations and window.labels_action.isEnabled()
             window.commit_history()
             project=Path(folder)/'smoke.astro'
             save_project(project,window.original_linear,window.original_header,window.project_manifest())

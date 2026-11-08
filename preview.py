@@ -5,6 +5,7 @@ import engine
 
 
 class ImagePreview(W.QGraphicsView):
+    annotationPlaced = QtCore.Signal(float,float)
     selection = QtCore.Signal(int,int,int,int)
     zoomChanged = QtCore.Signal(float)
     editStarted = QtCore.Signal()
@@ -15,6 +16,7 @@ class ImagePreview(W.QGraphicsView):
         self.item = W.QGraphicsPixmapItem(); self.scene().addItem(self.item)
         self.item.setTransformationMode(QtCore.Qt.SmoothTransformation)
         self.empty_text = text
+        self.annotation_placing=False;self.annotations=[];self.annotations_visible=True;self.annotation_crop=(0,0,0,0);self.annotation_width=1200
         self.source_size = None
         self.selection_pixels = None
         self.ratio = None
@@ -89,6 +91,9 @@ class ImagePreview(W.QGraphicsView):
             self.pan_start=pos; self.pan_values=(self.horizontalScrollBar().value(),self.verticalScrollBar().value())
             self.setCursor(QtCore.Qt.ClosedHandCursor); event.accept(); return
         if event.button()!=QtCore.Qt.LeftButton: return
+        if self.annotation_placing and self.image_rect().contains(pos):
+            point=self.mapToScene(pos)
+            self.annotation_placing=False;self.annotationPlaced.emit(point.x(),point.y());event.accept();return
         self.start_pixel=self.pixels_at(pos)
         self.start_bounds=self.selection_pixels or (0,0,*self.source_size)
         edge=self.hit_handle(pos)
@@ -141,6 +146,10 @@ class ImagePreview(W.QGraphicsView):
         if event.button()==QtCore.Qt.LeftButton:
             if self.mode: self.mouseMoveEvent(event)
             self.mode=None;self.editFinished.emit();event.accept()
+    def drawForeground(self,painter,rect):
+        if self.annotations_visible:
+            from annotations import paint_annotations
+            paint_annotations(painter,self.annotations,self.annotation_crop,self.annotation_width)
     def paintEvent(self,event):
         super().paintEvent(event)
         if not self.source_size or self.item.pixmap().isNull():
