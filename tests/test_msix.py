@@ -15,7 +15,7 @@ def test_manifest_requires_real_identity_for_store_and_escapes_values():
     root=msix.manifest(msix.validate_identity(identity)).getroot()
     data=ET.tostring(root);parsed=ET.fromstring(data)
     assert parsed.find('{'+msix.NS+'}Properties/{'+msix.NS+'}PublisherDisplayName').text=='A & B'
-    assert parsed.find('{'+msix.NS+'}Identity').attrib['Version']=='1.3.0.0'
+    assert parsed.find('{'+msix.NS+'}Identity').attrib['Version']=='1.3.1.0'
     app=parsed.find('{'+msix.NS+'}Applications/{'+msix.NS+'}Application')
     assert app.attrib['{'+msix.UAP10+'}TrustLevel']=='mediumIL'
     assert app.attrib['Executable']=='App\\EasyAstroStudio.exe'

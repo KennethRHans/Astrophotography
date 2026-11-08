@@ -98,7 +98,10 @@ def wait_dialog(app,d):
 
 def test_dialog_consent_offline_review_and_no_key_persistence(tmp_path,monkeypatch):
     app,w=app_and_window(tmp_path);image=sample();d=IdentifyDialog(image,fits.Header(),(0,0,96,64),w)
-    assert d.method.currentIndex()==1 and not d.start.isEnabled()
+    assert d.method.currentIndex()==0 and not d.start.isEnabled()
+    assert not d.image_thumbnail.pixmap().isNull() and 'Image loaded' in d.source_summary.text()
+    assert 'no usable sky-coordinate' in d.local_note.text()
+    d.choose_online.click();assert d.method.currentIndex()==1 and not d.start.isEnabled()
     d.key.setText('fake-key');assert not d.start.isEnabled()
     d.consent.setChecked(True);assert d.start.isEnabled()
     d.consent.setChecked(False);assert not d.start.isEnabled();d.reject();assert not d.key.text()
@@ -162,3 +165,23 @@ def test_full_catalog_projection_through_sip_does_not_fail_on_far_away_objects()
     w=WCS(sky_header());a=np.zeros((3,3));a[2,0]=1e-5;w.sip=Sip(a,a,None,None,w.wcs.crpix);w.wcs.ctype=['RA---TAN-SIP','DEC--TAN-SIP']
     matches=identify_catalog(w.to_header(relax=True),(80,100,3))
     assert any(r['id']=='OpenNGC:NGC0224' for r in matches)
+
+
+def test_main_window_identifies_current_image_and_shows_filename_preview(tmp_path,monkeypatch):
+    import app as app_module
+    app,w=app_and_window(tmp_path);data=sample();w.loaded(data,fits.Header({'OBJECT':'M77'}));settle(app,w)
+    w.source_paths=['C:/Pictures/Stacked_M77.fit'];w.select_crop(5,4,90,60);w.crop_selected()
+    captured=[]
+    class Capture(IdentifyDialog):
+        def exec(self):
+            captured.append(self)
+            assert self.image is w.original_linear
+            assert self.crop==w.applied_crop==(5,4,90,60)
+            assert 'Stacked_M77.fit' in self.source_summary.text()
+            assert '96 × 64' in self.source_summary.text() and '85 × 56' in self.source_summary.text()
+            assert not self.image_thumbnail.pixmap().isNull()
+            assert self.method.currentIndex()==0 and not self.start.isEnabled()
+            return W.QDialog.Rejected
+    monkeypatch.setattr(app_module,'IdentifyDialog',Capture)
+    w.identify_objects();assert len(captured)==1
+    w.close();settle(app,w)

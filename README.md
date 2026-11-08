@@ -1,8 +1,27 @@
-# Easy Astro Studio — 1.3.0 Store update
+# Easy Astro Studio — 1.3.1 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Identification image context and offline default (1.3.1)
+
+The Identify objects dialog now shows the currently loaded filename/target,
+a thumbnail of the main window's adjusted crop, original image dimensions and
+the applied crop dimensions. It uses the already open full-resolution source
+for solving and the current crop for catalog-result filtering; no second file
+selection is needed. The thumbnail is local display context, not upload data.
+
+The initial method is always Offline. When a usable FITS/project celestial WCS
+is missing, the dialog keeps Offline selected, disables the Identify action,
+explains that the image is loaded but pixel-to-sky coordinates are missing, and
+shows the validation reason. An explicit Set up online solving button changes
+the method without submitting anything. Online solving still requires an API
+key, per-solve consent and an explicit click. A FITS filename, object name or
+RA/Dec target center alone is not a full astrometric solution. This update does
+not add a standalone offline plate solver or infer an unverified orientation.
+
+Windows package validation is in progress for version 1.3.1.0.
 
 ## Automatic catalog labels (1.3.0)
 

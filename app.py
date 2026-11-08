@@ -647,7 +647,8 @@ class Window(W.QMainWindow):
     def identify_objects(self):
         if self.linear is None or self.worker is not None or self.project_worker is not None:return
         header=self.solution_header if self.solution_header is not None else self.original_header
-        dialog=IdentifyDialog(self.original_linear,header,self.applied_crop,self)
+        source=Path(self.source_paths[0]).name if len(self.source_paths)==1 else self.source_name
+        dialog=IdentifyDialog(self.original_linear,header,self.applied_crop,self,source_name=source,preview_image=self.preview.item.pixmap().toImage())
         try:
             if dialog.exec()==W.QDialog.Accepted:self.add_identified_objects(dialog.selected_rows(),dialog.solution)
         finally:dialog.deleteLater()
