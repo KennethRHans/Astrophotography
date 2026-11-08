@@ -8,6 +8,7 @@ import cv2
 from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 from annotations import LabelsPanel,paint_annotations
+from identify_dialog import IdentifyDialog
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -75,6 +76,7 @@ class Window(W.QMainWindow):
         self.history=EditHistory()
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
+        self.solution_header=None
         self.annotations=[];self.labels_visible=True
         self.source_paths=[]
         self.preview_renderer=PreviewRenderer();self.preview_worker=None;self._preview_generation=0;self._preview_pending=False;self._close_after_preview=False;self._files_json=None
@@ -254,6 +256,7 @@ class Window(W.QMainWindow):
         self.labels_action=QtGui.QAction('Labels && Objects…',self);self.labels_action.setToolTip('Open an image to add labels');toolbar.addAction(self.labels_action)
         self.labels_panel=LabelsPanel();self.labels_dock=W.QDockWidget('Labels && Objects',self);self.labels_dock.setWidget(self.labels_panel);self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.labels_dock);self.labels_dock.hide()
         self.labels_action.triggered.connect(lambda:self.labels_dock.setVisible(not self.labels_dock.isVisible()))
+        self.labels_panel.identify.connect(self.identify_objects)
         self.labels_panel.place.connect(self.begin_label);self.preview.annotationPlaced.connect(self.place_label)
         self.labels_panel.changed.connect(self.edit_label);self.labels_panel.remove.connect(self.remove_label);self.labels_panel.clear.connect(self.clear_labels)
         self.labels_panel.visible.toggled.connect(self.set_labels_visible);self.labels_panel.list.currentRowChanged.connect(self.select_label)
@@ -306,7 +309,8 @@ class Window(W.QMainWindow):
     def show_about(self):
         W.QMessageBox.about(self,'About Easy Astro Studio',
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
-            '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>'
+            '<p>Align and stack FITS exposures, adjust and crop images, identify and label catalog objects, and export FITS, TIFF, PNG or JPEG.</p>'
+            '<p>Catalog data: OpenNGC (Mattia Verga and contributors) and HYG v4.1 (David Nash / Astronomy Nexus and contributors), CC BY-SA 4.0. Full attribution and license are bundled in assets/catalogs.</p>'
             '<p><a href="'+community_links.PRIVACY_URL+'">Privacy Policy</a> · Privacy contact: starsandfits@gmail.com</p>')
 
     def review_exposures(self):
@@ -358,6 +362,7 @@ class Window(W.QMainWindow):
                 self.save_project_dialog(after_save=lambda:self.new_project(True));return
         self.timer.stop();self.history_timer.stop();self._preview_generation+=1;self._preview_pending=False
         self._history_ready=False
+        self.solution_header=None
         self.annotations=[];self.labels_visible=True;self.refresh_labels();self.labels_dock.hide();self.preview.annotation_placing=False
         self.linear=self.header=self.rendered=None
         self.original_linear=self.original_header=self.background=None
@@ -442,6 +447,7 @@ class Window(W.QMainWindow):
         self.update_actions()
     def loaded(self, linear, header):
         self._history_ready=False
+        self.solution_header=None
         self.annotations=[];self.labels_visible=True;self.refresh_labels()
         self.project_path=None
         self.source_paths=list(getattr(self,'pending_source_paths',[]))
@@ -638,6 +644,24 @@ class Window(W.QMainWindow):
         self.preview.set_image(image,result['source_size'])
         self.refresh_label_overlay()
 
+    def identify_objects(self):
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
+        header=self.solution_header if self.solution_header is not None else self.original_header
+        dialog=IdentifyDialog(self.original_linear,header,self.applied_crop,self)
+        try:
+            if dialog.exec()==W.QDialog.Accepted:self.add_identified_objects(dialog.selected_rows(),dialog.solution)
+        finally:dialog.deleteLater()
+    def add_identified_objects(self,rows,solution=None):
+        self.commit_history();seen={a.get('catalog_id') for a in self.annotations if a.get('catalog_id')};added=0
+        for row in rows:
+            if row['id'] in seen or len(self.annotations)>=500:continue
+            if not (0<=row['x']<self.original_linear.shape[1] and 0<=row['y']<self.original_linear.shape[0]):continue
+            self.annotations.append(dict(kind='Circle',text=row['name'][:200],color=self.labels_panel.color.currentData(),size=self.labels_panel.size.value(),x=float(row['x']),y=float(row['y']),catalog_id=row['id']))
+            seen.add(row['id']);added+=1
+        if solution is not None:self.solution_header=solution.copy()
+        self.labels_visible=True;self.refresh_labels();self.commit_history();self.update_actions()
+        self.log.appendPlainText(f'Added {added} catalog labels. Existing duplicates were kept once; projects support up to 500 labels. Check positions against visible stars.')
+
     def make_background(self,image):
         model=engine.background_model(image)
         return dict(display_encoded=True,background=model) if self.header.get('EASRASTR') else model
@@ -749,7 +773,7 @@ class Window(W.QMainWindow):
     def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
         if self._files_json is None:self._files_json=json.dumps([self.files.item(i).text() for i in range(self.files.count())])
-        return json.dumps(dict(state=self.edit_state(),bayer=self.bayer.currentText()),sort_keys=True)+'|'+self._files_json
+        return json.dumps(dict(state=self.edit_state(),bayer=self.bayer.currentText(),identification_wcs=self.solution_header.tostring(sep='\n',endcard=True,padding=False) if self.solution_header is not None else None),sort_keys=True)+'|'+self._files_json
     def schedule_history(self):
         if self._history_ready and not self._restoring:
             if self.preview.mode is not None or any(slider.isSliderDown() for slider in self.sliders.values()):self.history_timer.stop()
@@ -816,7 +840,7 @@ class Window(W.QMainWindow):
     def project_manifest(self):
         self.commit_history()
         center=self.preview.mapToScene(self.preview.viewport().rect().center())
-        return dict(state=self.edit_state(),source_name=self.source_name,source_files=self.source_paths,
+        return dict(state=self.edit_state(),identification_wcs=self.solution_header.tostring(sep='\n',endcard=True,padding=False) if self.solution_header is not None else None,source_name=self.source_name,source_files=self.source_paths,
                     input_files=[self.files.item(i).text() for i in range(self.files.count())],bayer=self.bayer.currentText(),
                     history=dict(states=copy.deepcopy(self.history.states),index=self.history.index),
                     view=dict(fit=self.preview.fit_mode,zoom=self.preview.transform().m11(),center=[center.x(),center.y()],
@@ -862,6 +886,9 @@ class Window(W.QMainWindow):
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
             self.loaded(linear,header)
+            if meta.get('identification_wcs'):
+                from astropy.io import fits
+                self.solution_header=fits.Header.fromstring(meta['identification_wcs'],sep='\n')
             self.source_name=str(meta.get('source_name','image'))
             self.source_paths=list(meta.get('source_files',[]))
             self.files.clear();self.files.addItems(meta.get('input_files',[]))
@@ -956,13 +983,22 @@ if __name__ == '__main__':
         window.zoom_fit.click()
         window.update_preview()
         app.processEvents()
-        import tempfile
+        import tempfile,time
         with tempfile.TemporaryDirectory() as folder:
             output=Path(folder)/'smoke.jpg'
             engine.save(output,window.linear,engine.render(window.linear,*window.settings()),window.header)
             from PIL import Image
             with Image.open(output) as exported:
                 assert exported.format=='JPEG'
+            from object_identification import catalog
+            from astropy.wcs import WCS
+            target=next(r for r in catalog() if r['id']=='OpenNGC:NGC0224')
+            sky=WCS(naxis=2);sky.wcs.crpix=[40,30];sky.wcs.crval=[target['ra'],target['dec']];sky.wcs.cdelt=[-1/3600,1/3600];sky.wcs.ctype=['RA---TAN','DEC--TAN']
+            identification=IdentifyDialog(window.original_linear,sky.to_header(),window.applied_crop,window);identification.identify()
+            deadline=time.monotonic()+20
+            while identification.worker is not None and time.monotonic()<deadline:app.processEvents();time.sleep(.01)
+            assert identification.worker is None and identification.selected_rows(),'Packaged offline identification failed'
+            window.add_identified_objects(identification.selected_rows(),identification.solution);identification.reject()
             raster,raster_header=engine.read_image(output);assert raster_header['EASRASTR'] and raster.shape==window.linear.shape
             window.labels_panel.text.setText('Test target');window.place_label(30,25)
             assert window.labeled_image().save(str(Path(folder)/'labeled.png'))

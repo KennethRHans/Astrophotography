@@ -62,7 +62,7 @@ def test_review_preview_analysis_reference_and_main_image_preservation(tmp_path,
     assert window.files.item(0).text()==paths[1]
     assert window.files.count()==3 and window.linear is original and window.edit_state()==before
     captured=[];monkeypatch.setattr(W.QMessageBox,'about',lambda *args:captured.append(args[-1]))
-    window.about_action.trigger();assert 'Version 1.2.0' in captured[0]
+    window.about_action.trigger();assert 'Version 1.3.0' in captured[0]
     window.close()
 
 

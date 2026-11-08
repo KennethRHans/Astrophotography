@@ -1,8 +1,56 @@
-# Easy Astro Studio — 1.2.0 Store update
+# Easy Astro Studio — 1.3.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Automatic catalog labels (1.3.0)
+
+Open **Labels & Objects… → Identify objects…**. With a complete RA/Dec FITS WCS
+or saved-project solution, the offline method projects bundled catalog positions
+onto the full original image, then filters to the current applied crop. Position
+matching supports rotation, mirroring and SIP distortion. Header placeholders,
+missing pixel scales and external distortion-table dependencies are rejected.
+Existing headers are assumed to describe the actual image; the app cannot
+prove their accuracy without a new solve. Check labels against visible stars.
+
+Without valid sky coordinates, choose the online Astrometry.net method, obtain
+your own API key at https://nova.astrometry.net/api_help, enter it in the masked
+field, check the explicit consent box and click Identify. Local SEP extraction
+finds up to 2,000 stars in a bounded sample and maps their positions back to the
+original full-resolution pixel system. HTTPS sends the positions/rank, image
+size and solver options, not image pixels, paths, filenames or FITS headers.
+Login sends your key only to the service; it is never written to settings,
+projects or logs. The app requests private visibility and restrictive reuse.
+Astrometry.net may retain requests; cancellation cannot recall uploaded data.
+The GUI stays responsive, polls at five-second intervals, limits each network
+request to 20 seconds and waits at most ten minutes for a solution.
+
+Review the results before **Add selected labels**. Filter Galaxies, Nebulae,
+Clusters and Stars; set the faintest catalog magnitude, unknown-magnitude policy
+and maximum results (1–300). Check individual rows or Select all/none. Selected
+matches become editable circle/text labels with the current color and size,
+with duplicate prevention by catalog ID and a 500-label project limit. Existing
+manual labels are preserved. Undo removes a batch; projects save both labels
+and the sky solution so future filtering can work offline. A solved identification
+WCS is cached in the project; original FITS headers and source pixels are not
+rewritten by identification. Crop/export follows the existing annotation path.
+
+Bundled data: reduced OpenNGC deep-sky and HYG v4.1 bright-star catalogs, 15,162
+entries total (3,065 stars). Attribution, data source details and CC BY-SA 4.0
+license are in `assets/catalogs`. The catalogs cover selected named/bright stars
+and NGC/IC objects, not every object. Magnitudes can be approximate or absent;
+HYG proper motions are applied when DATE-OBS is valid. These are catalog
+positions, not pixel-level detection or proof that a faint object is visible.
+
+The online protocol is tested with simulated login, queued/solving jobs,
+private source-list submission, WCS download, cancellation and error responses.
+No live authenticated solve or private user-data upload was performed during
+development. All 66 local tests passed, including sky projection through
+rotation/mirroring/SIP, real-catalog matching, source extraction, HTTPS request
+encoding, redacted errors, opt-in, cancellation, duplicate handling and project
+reopening. The application smoke test also passed. Full Windows package
+validation is in progress for 1.3.0.0.
 
 ## Labels, image opening and stack completion (1.2.0)
 

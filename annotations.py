@@ -8,6 +8,7 @@ def validate_annotations(items, shape):
     h,w,_=shape
     for a in items:
         if not isinstance(a,dict) or a.get('kind') not in ('Text','Arrow','Circle'):raise ValueError('Invalid annotation type')
+        if 'catalog_id' in a and (not isinstance(a['catalog_id'],str) or len(a['catalog_id'])>150):raise ValueError('Invalid catalog identifier')
         if not isinstance(a.get('text'),str) or len(a['text'])>200:raise ValueError('Invalid annotation text')
         if not isinstance(a.get('color'),str) or not QtGui.QColor(a['color']).isValid():raise ValueError('Invalid annotation color')
         for key,limit in (('x',w),('y',h)):
@@ -41,10 +42,12 @@ def paint_annotations(painter,items,crop,original_width):
 
 
 class LabelsPanel(W.QWidget):
+    identify=QtCore.Signal()
     place=QtCore.Signal();changed=QtCore.Signal();remove=QtCore.Signal();clear=QtCore.Signal()
     def __init__(self):
         super().__init__();layout=W.QVBoxLayout(self)
         hint=W.QLabel('Manual labels: choose a type, then click Place and click the image. Coordinates follow the original image through cropping.');hint.setWordWrap(True);layout.addWidget(hint)
+        self.identify_button=W.QPushButton('Identify objects…');self.identify_button.clicked.connect(self.identify);layout.addWidget(self.identify_button)
         self.kind=W.QComboBox();self.kind.addItems(['Text','Arrow','Circle']);layout.addWidget(self.kind)
         self.text=W.QLineEdit();self.text.setMaxLength(200);self.text.setPlaceholderText('Object name or note');layout.addWidget(self.text)
         self.color=W.QComboBox()
@@ -57,5 +60,5 @@ class LabelsPanel(W.QWidget):
         self.apply_button=W.QPushButton('Apply changes to selected');self.apply_button.clicked.connect(self.changed);layout.addWidget(self.apply_button)
         self.remove_button=W.QPushButton('Remove selected');self.remove_button.clicked.connect(self.remove);layout.addWidget(self.remove_button)
         self.clear_button=W.QPushButton('Clear all labels');self.clear_button.clicked.connect(self.clear);layout.addWidget(self.clear_button)
-        note=W.QLabel('Automatic object identification will require plate solving and is planned for a later release. Export a labeled copy from section 5.');note.setWordWrap(True);layout.addWidget(note)
+        note=W.QLabel('Identify uses existing sky coordinates or an optional online plate solve. Review catalog matches before adding them. Export a labeled copy from section 5.');note.setWordWrap(True);layout.addWidget(note)
     def values(self):return dict(kind=self.kind.currentText(),text=self.text.text().strip(),color=self.color.currentData(),size=self.size.value())

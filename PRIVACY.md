@@ -21,7 +21,7 @@ state and references to original file paths. Exports and projects stay where you
 save them. If you share those files yourself, their contents and metadata may be
 visible to the recipient.
 
-The app saves interface preferences, such as your theme, GPU preference and last selected FITS folder, locally under
+The app saves interface preferences, such as your theme, GPU preference, completion-sound preference and last selected image folder, locally under
 your Windows user account. It uses temporary disk files during stacking and normally
 removes them when processing ends. An interruption or system crash may leave
 temporary files on your device. Uninstalling the app does not necessarily remove
@@ -30,6 +30,43 @@ images, projects or exports you saved in your own folders.
 You do not need an app account for image processing. The desktop app does not
 include an advertising or usage-analytics SDK or implement its own automatic
 crash-reporting service.
+
+## Optional object identification and plate solving
+
+**Identify objects** can use existing FITS or saved-project sky coordinates and
+bundled catalogs entirely on your computer. That offline method does not send
+data to an external service. Catalog labels are positions of known objects,
+not confirmation that those objects were detected in the image. Saved projects
+can contain annotations and a plate solution (sky-coordinate metadata).
+
+If you select **Solve with Astrometry.net (online)**, enter your own Astrometry.net
+API key, check the consent box and click **Identify**, the app sends over HTTPS
+to **nova.astrometry.net**:
+
+- Your API key to authenticate with that service, followed by its session token.
+- Up to 2,000 extracted star pixel positions, ranked by brightness, and the
+  original image dimensions, plus solver and requested visibility/reuse settings.
+
+The app does not send image pixels, original filenames, local paths, FITS
+headers, observing dates, observer details or processing logs for this feature.
+The star pattern can nevertheless reveal the imaged sky location. Astrometry.net
+also receives connection information such as your IP address and request times,
+and may retain submissions and results under its own service practices. The
+app requests private visibility and restrictive reuse settings; these requests
+do not guarantee confidentiality, deletion or a particular retention period.
+Read the service information at https://astrometry.net/doc/net/api.html and your
+Astrometry.net account settings before choosing to submit.
+
+The API key is entered in a masked field and retained only for the dialog's
+operation. Easy Astro Studio does not save it in app settings, projects, exported
+images or logs. Do not include an API key in feedback or share it with others.
+
+You can cancel before starting to avoid submission. Once a request is uploaded,
+Cancel stops the app waiting for it and cannot recall it or stop the remote
+service processing it. The app downloads the resulting sky solution and matches
+it with bundled catalogs locally. Accepted labels and the sky solution can be
+saved in your project; no API key or service session is included. Requests about
+data held by Astrometry.net should be directed to that independent service.
 
 ## Optional bug reports and suggestions
 
@@ -73,7 +110,7 @@ astronomy files through the app.
 Microsoft operates the Store and Windows services under its own terms,
 [privacy statement](https://privacy.microsoft.com/privacystatement) and your
 platform settings. Store distribution and platform diagnostics are separate
-from Easy Astro Studio's local image processing and optional feedback form.
+from Easy Astro Studio's local image processing and optional feedback/plate-solving features.
 
 ## Storage, retention and security
 
@@ -88,7 +125,7 @@ Formspree or the receiving mailbox until deleted, subject to provider/account
 settings and any applicable legal requirements. You can request deletion of
 information under Astrivanta's control by emailing **starsandfits@gmail.com**.
 
-Feedback uses HTTPS in transit. Formspree and email providers may store or
+Optional feedback and online plate solving use HTTPS in transit. Formspree and email providers may store or
 process submissions outside your country, including in the United States,
 under their respective privacy policies and service arrangements.
 
