@@ -21,7 +21,20 @@ key, per-solve consent and an explicit click. A FITS filename, object name or
 RA/Dec target center alone is not a full astrometric solution. This update does
 not add a standalone offline plate solver or infer an unverified orientation.
 
-Windows package validation is in progress for version 1.3.1.0.
+All 67 local tests passed, including a regression test for the exact open
+source image, filename, adjusted preview and applied crop being passed into
+identification. The application smoke test and Windows tests, packaged smoke
+checks, exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade checks passed for version 1.3.1.0.
+
+[Download the 1.3.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42491733499/artifacts/13621677464).
+Extract it and run `installer/EasyAstroStudio-1.3.1-Setup.exe`.
+
+[Download the 1.3.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42491733499/artifacts/13621773113).
+Extract and upload `EasyAstroStudio-1.3.1-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. Offline identification still
+requires valid sky coordinates; this update clarifies that requirement and does
+not add a standalone offline plate solver.
 
 ## Automatic catalog labels (1.3.0)
 
