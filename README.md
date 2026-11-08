@@ -37,7 +37,14 @@ a single image, failed operations and cancellation do not play the chime.
 System volume and sound-scheme settings control whether a sound is audible.
 This release needs no online solver, account or extra Store capabilities.
 
-Windows packaging and installation validation is in progress for version 1.2.0.0.
+All 56 local tests passed. Windows tests, packaged GUI smoke checks (including
+JPG opening and labeled PNG export), MakePRI/MakeAppx validation and exact
+Microsoft Store identity installation/activation passed for version 1.2.0.0.
+
+[Download the 1.2.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42445610275/artifacts/13603766860).
+Extract it and upload `EasyAstroStudio-1.2.0-x64-Store-UNSIGNED.msix` to the
+Packages page of the next Partner Center submission. Microsoft signs accepted
+Store packages. The unsigned package is for Store upload, not direct installation.
 
 ## Session tools, sky background and responsive previews (1.1.0)
 
