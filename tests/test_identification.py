@@ -185,3 +185,49 @@ def test_main_window_identifies_current_image_and_shows_filename_preview(tmp_pat
     monkeypatch.setattr(app_module,'IdentifyDialog',Capture)
     w.identify_objects();assert len(captured)==1
     w.close();settle(app,w)
+
+
+@pytest.mark.parametrize('queued_jobs',[[],[None]])
+@pytest.mark.parametrize('finished',[None,'None','','2026-11-08 12:00:00+00:00'])
+def test_submission_preprocessing_is_not_a_solver_result(finished,queued_jobs):
+    polls=[];messages=[]
+    def transport(path,payload,binary):
+        if path=='/api/login':return {'session':'test-session'}
+        if path=='/api/upload':return {'subid':123}
+        if path=='/api/submissions/123':
+            polls.append(1)
+            return {'processing_started':'None','processing_finished':finished,'jobs':queued_jobs if len(polls)<3 else [456]}
+        if path=='/api/jobs/456':return {'status':'success'}
+        if path=='/wcs_file/456':return wcs_bytes(sky_header())
+        raise AssertionError(path)
+    _,job=NovaClient(transport).solve(dict(x=[1.],y=[1.],image_width=100,image_height=80),'fake-key',progress=messages.append,wait=lambda:None)
+    assert job==456 and len(polls)==3 and any('Queued for solving' in text for text in messages)
+    assert not any('without a solution' in text for text in messages)
+
+
+def test_failed_job_with_pending_placeholder_waits_for_additional_job():
+    polls=[]
+    def transport(path,payload,binary):
+        if path=='/api/login':return {'session':'test-session'}
+        if path=='/api/upload':return {'subid':123}
+        if path=='/api/submissions/123':
+            polls.append(1);return {'jobs':[456,None] if len(polls)==1 else [456,789],'processing_finished':'2026-11-08 12:00:00'}
+        if path=='/api/jobs/456':return {'status':'failure'}
+        if path=='/api/jobs/789':return {'status':'success'}
+        if path=='/wcs_file/789':return wcs_bytes(sky_header())
+        raise AssertionError(path)
+    _,job=NovaClient(transport).solve(dict(x=[1.],y=[1.],image_width=100,image_height=80),'fake-key',wait=lambda:None)
+    assert job==789 and len(polls)==2
+
+
+@pytest.mark.parametrize('upload_error',[False,True])
+def test_actual_submission_errors_and_failed_jobs_are_distinguished(upload_error):
+    def transport(path,payload,binary):
+        if path=='/api/login':return {'session':'test-session'}
+        if path=='/api/upload':return {'subid':123}
+        if path=='/api/submissions/123':return {'error_message':'provider-specific secret content'} if upload_error else {'jobs':[456]}
+        if path=='/api/jobs/456':return {'status':'failure'}
+        raise AssertionError(path)
+    with pytest.raises(RuntimeError) as exc: NovaClient(transport).solve(dict(x=[1.],y=[1.],image_width=100,image_height=80),'fake-key',wait=lambda:None)
+    message=str(exc.value);assert '123' in message and 'provider-specific secret content' not in message
+    assert ('could not process' in message) if upload_error else ('failed solve' in message and '456' in message)

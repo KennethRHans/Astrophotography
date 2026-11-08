@@ -1,8 +1,28 @@
-# Easy Astro Studio — 1.3.1 Store update
+# Easy Astro Studio — 1.3.2 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Astrometry.net queued-submission fix (1.3.2)
+
+Fixes a premature "finished without a solution" error. The service may encode
+an unset processing-finished timestamp as the string `"None"`; additionally,
+submission preprocessing and astrometric jobs have separate lifecycles. Neither
+a truthy string nor a preprocessing-completion timestamp proves a solve failed.
+Empty job lists and pending `null` job placeholders now keep polling, with a
+clear queued status. The submission job list is refreshed every poll so newly
+assigned jobs are discovered. A failed job alongside a pending placeholder is
+not treated as failure of the whole request. Actual processing errors and
+explicit solver-job failures remain separate errors, with submission/job IDs.
+Remote error text is not echoed, protecting credentials from accidental display.
+
+Polling remains cancellable, with five-second intervals and a ten-minute wait
+limit. No extra data is uploaded by this fix and the privacy policy is unchanged.
+The 1.3.1 loaded-image preview and offline-default fixes are included.
+Authenticated live-service status has not been verified during development;
+the reported submission could not be retrieved through the available web tool.
+Windows package validation is in progress for version 1.3.2.0.
 
 ## Identification image context and offline default (1.3.1)
 

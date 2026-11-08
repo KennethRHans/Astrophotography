@@ -142,9 +142,17 @@ class NovaClient:
         progress(f'Waiting for solver • submission {subid}…');deadline=time.monotonic()+timeout;jobids=[]
         while time.monotonic()<deadline:
             check()
-            if not jobids:
-                sub=self.request(f'/api/submissions/{subid}');jobids=[j for j in sub.get('jobs',[]) if type(j) is int and j>0]
-                if not jobids and sub.get('processing_finished'):raise RuntimeError(f'Submission {subid} finished without a solution. Try a sharper image with more stars.')
+            # Submission preprocessing and astrometric jobs have separate
+            # lifecycles. processing_finished may be the STRING 'None', and
+            # even a timestamp does not mean a queued solving job has failed.
+            sub=self.request(f'/api/submissions/{subid}')
+            if sub.get('error_message'):
+                raise RuntimeError(f'Astrometry.net could not process the star-list submission {subid}. Check that submission on the service or try again later.')
+            raw_jobs=sub.get('jobs') or []
+            if not isinstance(raw_jobs,list):raise RuntimeError('Astrometry.net returned an invalid job list. Try again later.')
+            jobids=list(dict.fromkeys(j for j in raw_jobs if type(j) is int and j>0))
+            pending_jobs=not raw_jobs or any(type(j) is not int or j<=0 for j in raw_jobs)
+            if not jobids:progress(f'Queued for solving • submission {subid} • waiting for a solver job…')
             states=[]
             for job in jobids:
                 check();status=self.request(f'/api/jobs/{job}').get('status');states.append(status)
@@ -156,7 +164,7 @@ class NovaClient:
                         celestial_wcs(header,(sources['image_height'],sources['image_width'],3))
                     except Exception:raise RuntimeError('The service returned an invalid sky solution.') from None
                     return header,job
-            if states and all(s=='failure' for s in states):raise RuntimeError('The solver could not match these stars. Try the original stack or more exposures.')
+            if states and not pending_jobs and all(s=='failure' for s in states):raise RuntimeError(f'Astrometry.net reported a failed solve for submission {subid}, job(s) '+', '.join(map(str,jobids))+'. Try the original stack or a different reference image.')
             pause()
         raise TimeoutError(f'Submission {subid} is still pending after ten minutes. You can check it on Astrometry.net and try again later.')
 
