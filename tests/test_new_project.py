@@ -55,16 +55,3 @@ def test_new_project_saves_before_clearing(tmp_path,monkeypatch):
     np.testing.assert_array_equal(restored,image)
     assert meta['state']['sliders']['Sky brightness (stops ×100)']==50
     window.close()
-
-
-def test_toolbar_review_selects_files_then_opens_existing_analysis(tmp_path,monkeypatch):
-    qt=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    window=Window(ask_on_close=False)
-    seen=[]
-    monkeypatch.setattr(window,'add_files',lambda:window.files.addItem('/selected/light.fit'))
-    monkeypatch.setattr(window,'review_exposures',lambda:seen.append(window.files.item(0).text()))
-    window.exposure_review_action.trigger()
-    assert seen==['/selected/light.fit']
-    window.worker=object();window.update_actions()
-    assert not window.new_project_action.isEnabled() and not window.exposure_review_action.isEnabled()
-    window.worker=None;window.close()

@@ -143,9 +143,8 @@ must succeed before the project clears; cancelling the save dialog or a failed
 save keeps the current work. A list of unprocessed exposures gets a separate
 Discard/Cancel prompt. New Project retains theme, GPU and FITS-folder preferences.
 
-Preview / rate exposures is also on the toolbar. If no exposures are listed, it
-first opens the exposure picker. The same review dialog remains under Step 2,
-below Remove selected. Review offers preview/full resolution, zoom/pan, batch
+Preview / rate exposures remains in Step 2, below Remove selected, and becomes
+available after adding exposures. Review offers preview/full resolution, zoom/pan, batch
 star detection, approximate FWHM, elongation, relative scoring within comparable
 groups, sorting, highest-score selection, cancellation and Use as reference.
 Using a reference moves that exposure to the first position without removing

@@ -233,13 +233,12 @@ class Window(W.QMainWindow):
         self.history_timer=QtCore.QTimer();self.history_timer.setSingleShot(True);self.history_timer.timeout.connect(self.commit_history)
         toolbar=self.addToolBar('Projects and history');toolbar.setMovable(False)
         self.new_project_action=QtGui.QAction('New Project',self);self.new_project_action.setShortcut(QtGui.QKeySequence.StandardKey.New);self.new_project_action.triggered.connect(self.new_project)
-        self.exposure_review_action=QtGui.QAction('Preview / rate exposures…',self);self.exposure_review_action.triggered.connect(self.open_exposure_review)
         self.open_project_action=QtGui.QAction('Open project…',self);self.open_project_action.setShortcut(QtGui.QKeySequence.StandardKey.Open);self.open_project_action.triggered.connect(self.open_project_dialog)
         self.save_project_action=QtGui.QAction('Save project',self);self.save_project_action.setShortcut(QtGui.QKeySequence.StandardKey.Save);self.save_project_action.triggered.connect(self.save_project_dialog)
         self.save_as_action=QtGui.QAction('Save project as…',self);self.save_as_action.setShortcut(QtGui.QKeySequence.StandardKey.SaveAs);self.save_as_action.triggered.connect(lambda: self.save_project_dialog(save_as=True))
         self.undo_action=QtGui.QAction('Undo',self);self.undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo);self.undo_action.triggered.connect(self.undo_edit)
         self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(QtGui.QKeySequence.keyBindings(QtGui.QKeySequence.StandardKey.Redo));self.redo_action.triggered.connect(self.redo_edit)
-        for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action,self.exposure_review_action):toolbar.addAction(action)
+        for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
         file_menu=self.menuBar().addMenu('File');file_menu.addActions([self.new_project_action,self.open_project_action,self.save_project_action,self.save_as_action])
         edit_menu=self.menuBar().addMenu('Edit');edit_menu.addActions([self.undo_action,self.redo_action])
         self.community_panel = W.QFrame(); self.community_panel.setObjectName('communityPanel')
@@ -289,11 +288,6 @@ class Window(W.QMainWindow):
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
             '<p>Align and stack FITS exposures, adjust and crop images, and export FITS, TIFF, PNG or JPEG.</p>'
             '<p><a href="'+community_links.PRIVACY_URL+'">Privacy Policy</a> · Privacy contact: starsandfits@gmail.com</p>')
-
-    def open_exposure_review(self):
-        if self.worker is not None or self.project_worker is not None:return
-        if not self.files.count():self.add_files()
-        if self.files.count():self.review_exposures()
 
     def review_exposures(self):
         if self.worker is not None or self.project_worker is not None or not self.files.count():return
@@ -592,7 +586,6 @@ class Window(W.QMainWindow):
         self.save_project_action.setEnabled(ready and not busy);self.save_as_action.setEnabled(ready and not busy)
         self.open_project_action.setEnabled(not busy)
         self.new_project_action.setEnabled(not busy)
-        self.exposure_review_action.setEnabled(not busy)
         if ready:
             self._dirty=self.project_signature()!=self._saved_signature
             name=Path(self.project_path).name if self.project_path else engine.export_basename(self.header,self.source_name)
@@ -892,8 +885,9 @@ if __name__ == '__main__':
         app.processEvents()
         assert window.linear is None and window.files.count()==0
         assert not window.save_project_action.isEnabled() and not window.undo_action.isEnabled()
-        assert window.exposure_review_action.isEnabled()
+        assert not window.review.isEnabled()
         project_actions=window.findChild(W.QToolBar).actions()
+        assert all('Preview / rate exposures' not in action.text() for action in project_actions)
         assert project_actions.index(window.new_project_action)+1==project_actions.index(window.open_project_action)
 
         if '--require-package-identity' in sys.argv:assert has_package_identity(),'Expected MSIX package identity'
