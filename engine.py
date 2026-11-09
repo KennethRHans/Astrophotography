@@ -338,3 +338,39 @@ def save(path, linear, rendered, header):
         Image.fromarray(np.round(rendered*255).astype(np.uint8)).save(path)
     else:
         raise ValueError('Choose .fits, .tif, .tiff, .png, .jpg or .jpeg.')
+
+
+def auto_sky_adjustments(linear,settings,model=None,size=None,target=.12):
+    """Suggest a reversible darker display; never alter source pixels/black point.
+
+    A lower-middle luminance estimate is not a semantic sky mask. Extended
+    nebulosity can affect it. Work at preview scale to keep the action bounded.
+    """
+    h,w=linear.shape[:2]
+    size=size or (w,h);factor=max(1,max(size)/768)
+    size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
+    sample=linear if size==(w,h) else cv2.resize(linear,size,interpolation=cv2.INTER_AREA)
+    values=list(settings);normalization=normalize_image(sample,values[1],values[4],values[5],model)
+    valid=normalization[1]
+    if valid.sum()<16:return tuple(values)
+    def level(v):
+        image=render(sample,*v,model=model,normalization=normalization)
+        return float(np.percentile((image@np.array([.2126,.7152,.0722],dtype=np.float32))[valid],35))
+    if level(values)<=target:return tuple(values)
+    values[8]=0  # No shadow-offset clipping is introduced by the suggestion.
+    low=list(values);low[0]=0
+    if level(low)<=target:
+        lo,hi=0,int(values[0])
+        while lo<hi:
+            mid=(lo+hi+1)//2;candidate=list(values);candidate[0]=mid
+            if level(candidate)<=target:lo=mid
+            else:hi=mid-1
+        values[0]=lo
+    else:
+        values[0]=0;lo,hi=-2.,float(values[6])
+        for _ in range(9):
+            mid=(lo+hi)/2;candidate=list(values);candidate[6]=mid
+            if level(candidate)<=target:lo=mid
+            else:hi=mid
+        values[6]=round(lo,2)
+    return tuple(values)

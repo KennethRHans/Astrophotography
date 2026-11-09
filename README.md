@@ -1,8 +1,42 @@
-# Easy Astro Studio — 1.4.0 Store update
+# Easy Astro Studio — 1.4.1 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Gaia diagnostics, crop reset and Auto sky (1.4.1)
+
+Gaia errors now identify HTTP status, DNS, TLS/certificate, timeout or connection
+failure without echoing raw exceptions, response bodies, credentials or sky
+center coordinates. Errors include the query radius, magnitude limit and attempt
+count. HTTP 403 and certificate failures are immediate actionable diagnostics;
+no certificate verification is disabled. Transient timeouts, connection failures,
+rate limits and HTTP 5xx errors receive up to three attempts with cancellable
+backoff. Each request allows 60 seconds. Retry-After delays are respected; long
+server-requested waits are reported instead of retrying early. The existing
+bundled-catalog/sky-solution fallback is preserved. The precise cause of the
+user's 1–2 second failure is not known until the improved diagnostic is observed.
+
+**Reset crop** now appears beside the preview zoom controls and in the Crop
+section. It removes all applied cropping, restores the original header/image,
+clears selection and aspect-ratio restrictions (Free), and fits the full image.
+Sliders and labels are preserved. Undo restores the previous crop in one step.
+
+**Auto sky** beside the preview and **Auto sky background** in Adjust suggest a
+darker display for linear FITS images. A bounded preview-scale estimate reduces
+Stretch and, when needed, Brightness, clearing the Sky offset. It preserves the
+black percentile, other adjustments, crop, annotations and source pixels. The
+suggestion targets a low-middle luminance near 0.12; it is not a semantic sky
+mask, photometric calibration or an exact recreation of the camera's JPG.
+Extended nebulosity can affect the estimate and faint structures can look
+darker. Undo restores the prior settings. Linear FITS exports remain unmodified
+by display adjustments. JPG/PNG images with an already dark sky are unchanged.
+
+The public Gaia CI probe now covers both a small cone and a Seestar-sized
+1.7-degree radius. All 92 local tests passed, including error classification,
+retry/cancellation and Retry-After handling, full crop reset/undo and Auto sky
+source-data preservation. The application smoke test passed. Windows package
+validation is in progress for 1.4.1.0.
 
 ## Gaia matching, embedded privacy and identification layout (1.4.0)
 

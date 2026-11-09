@@ -73,7 +73,7 @@ class IdentifyDialog(W.QDialog):
         self.gaia_consent=VisibleCheckBox('I agree to send this sky-region query to ESA Gaia Archive for this search.');gaia_layout.addWidget(self.gaia_consent)
         tolerance_row=W.QHBoxLayout();tolerance_row.addWidget(W.QLabel('Maximum match separation (arcseconds)'))
         self.gaia_tolerance=W.QDoubleSpinBox();self.gaia_tolerance.setRange(.5,15);self.gaia_tolerance.setValue(5.);tolerance_row.addWidget(self.gaia_tolerance);tolerance_row.addStretch();gaia_layout.addLayout(tolerance_row);form.addRow(self.gaia_options);self.gaia_options.hide()
-        self.status=W.QLabel('Choose categories, then Identify. Results are limited to the current crop.' if self.has_wcs else 'Your image is loaded. Offline identification is unavailable until it has a sky solution; no network request has been sent.');self.status.setTextFormat(QtCore.Qt.PlainText);self.status.setWordWrap(True);root_layout.addWidget(self.status)
+        self.status=W.QLabel('Choose categories, then Identify. Results are limited to the current crop.' if self.has_wcs else 'Your image is loaded. Offline identification is unavailable until it has a sky solution; no network request has been sent.');self.status.setTextFormat(QtCore.Qt.PlainText);self.status.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse);self.status.setWordWrap(True);root_layout.addWidget(self.status)
         self.table=W.QTableWidget(0,5);self.table.setHorizontalHeaderLabels(['Use','Object','Category','Magnitude','Match (arcsec)']);self.table.setEditTriggers(W.QAbstractItemView.NoEditTriggers);self.table.horizontalHeader().setSectionResizeMode(1,W.QHeaderView.Stretch);self.table.setSortingEnabled(True);self.table.setMinimumHeight(150);layout.addWidget(self.table,1)
         select=W.QHBoxLayout()
         for title,state in [('Select all',QtCore.Qt.Checked),('Select none',QtCore.Qt.Unchecked)]:
@@ -151,7 +151,7 @@ class IdentifyDialog(W.QDialog):
         self.controls.setEnabled(True);self.cancel.setText('Close');self.update_start();self.update_apply()
     def reject(self):
         if self.worker is not None:
-            self.closing=True;self.worker.requestInterruption();self.controls.setEnabled(False);self.start.setEnabled(False);self.apply.setEnabled(False);self.cancel.setEnabled(False);self.set_status('Cancelling… Waiting for the current network request to finish (normally up to 30 seconds). Uploaded requests may continue on the service.','progress');return
+            self.closing=True;self.worker.requestInterruption();self.controls.setEnabled(False);self.start.setEnabled(False);self.apply.setEnabled(False);self.cancel.setEnabled(False);self.set_status('Cancelling… Waiting for the current network request to finish (normally up to 60 seconds). Uploaded requests may continue on the service.','progress');return
         self.key.clear();super().reject()
     def accept(self):
         if self.worker is None and self.selected_rows():self.key.clear();super().accept()

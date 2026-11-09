@@ -181,6 +181,7 @@ class Window(W.QMainWindow):
             slider.sliderReleased.connect(self.schedule_preview)
         hint = W.QLabel('Sky background: negative darkens shadows; positive lightens them. Darkening can hide faint nebulosity. Background correction can also suppress faint signal. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
+        self.auto_sky=W.QPushButton('Auto sky background');self.auto_sky.setToolTip('Suggest a darker display using Stretch and Brightness; clears the Sky offset. Other adjustments and source data are preserved. Faint nebulosity can look darker. Undo restores the previous view.');self.auto_sky.clicked.connect(self.auto_sky_background);sidebar.addWidget(self.auto_sky)
         self.reset = W.QPushButton('Reset adjustments')
         self.reset.setToolTip('Restore all sliders to their starting values')
         self.reset.clicked.connect(self.reset_adjustments)
@@ -197,7 +198,7 @@ class Window(W.QMainWindow):
         crop_layout.addRow('Alignment guides',self.guides)
         self.crop_dimensions = W.QLabel('No image loaded'); crop_layout.addRow(self.crop_dimensions)
         self.apply_crop = W.QPushButton('Apply crop'); self.apply_crop.clicked.connect(self.crop_selected)
-        self.restore_crop = W.QPushButton('Restore full frame'); self.restore_crop.clicked.connect(self.restore_full_frame)
+        self.restore_crop = W.QPushButton('Reset crop — show full image'); self.restore_crop.clicked.connect(self.restore_full_frame)
         crop_layout.addRow(self.apply_crop); crop_layout.addRow(self.restore_crop)
         self.crop_group.setEnabled(False); sidebar.addWidget(self.crop_group)
         next_export = W.QPushButton('Continue to step 5: Export →')
@@ -217,6 +218,8 @@ class Window(W.QMainWindow):
         self.zoom_in = W.QPushButton('+'); self.zoom_in.setFixedWidth(36); zoom_row.addWidget(self.zoom_in)
         self.zoom_fit = W.QPushButton('Fit'); zoom_row.addWidget(self.zoom_fit)
         self.zoom_actual = W.QPushButton('100%'); zoom_row.addWidget(self.zoom_actual)
+        self.reset_crop_preview=W.QPushButton('Reset crop');self.reset_crop_preview.setToolTip('Remove all cropping and aspect-ratio restrictions; keep image adjustments.');self.reset_crop_preview.clicked.connect(self.restore_full_frame);self.reset_crop_preview.setEnabled(False);zoom_row.addWidget(self.reset_crop_preview)
+        self.auto_sky_preview=W.QPushButton('Auto sky');self.auto_sky_preview.setToolTip('Suggest a darker sky background; Undo restores the previous view.');self.auto_sky_preview.clicked.connect(self.auto_sky_background);self.auto_sky_preview.setEnabled(False);zoom_row.addWidget(self.auto_sky_preview)
         self.zoom_label = W.QLabel('Fit'); zoom_row.addWidget(self.zoom_label); zoom_row.addStretch()
         self.preview_panel = W.QFrame(); self.preview_panel.setObjectName('previewPanel')
         picture_layout = W.QVBoxLayout(self.preview_panel); picture_layout.setContentsMargins(4,4,4,4)
@@ -566,16 +569,32 @@ class Window(W.QMainWindow):
         self.update_preview()
         self.commit_history()
     def restore_full_frame(self):
-        if self.linear is None:
-            return
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
         self.commit_history()
-        self.applied_crop=(0,0,self.original_linear.shape[1],self.original_linear.shape[0])
-        self.linear, self.header = self.original_linear, self.original_header.copy()
-        self.background = self.make_background(self.linear)
-        self.reset_crop_controls()
-        self.log.appendPlainText('Full frame restored. Adjustments preserved.')
-        self.update_preview()
+        self._restoring=True
+        try:
+            self.timer.stop();self.history_timer.stop();self.preview.mode=None
+            old=self.crop_ratio.blockSignals(True);self.crop_ratio.setCurrentText('Free');self.crop_ratio.blockSignals(old)
+            self.applied_crop=(0,0,self.original_linear.shape[1],self.original_linear.shape[0])
+            self.linear,self.header=self.original_linear,self.original_header.copy()
+            self.background=self.make_background(self.linear)
+            self.reset_crop_controls();self.update_preview();self.preview.fit_image()
+        finally:self._restoring=False
+        self.log.appendPlainText('Crop reset: full image restored and aspect ratio set to Free. Adjustments and labels preserved.')
+        self.commit_history();self.update_actions()
+    def auto_sky_background(self):
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
         self.commit_history()
+        self._restoring=True
+        try:
+            old=self.baseline.blockSignals(True);self.baseline.setChecked(False);self.baseline.blockSignals(old)
+            proposed=engine.auto_sky_adjustments(self.linear,self.settings(),self.background,self.preview_request()[1])
+            for name,value in [('Stretch',int(proposed[0])),('Brightness (stops ×100)',round(proposed[6]*100)),('Sky background %',round(proposed[8]*100))]:
+                slider=self.sliders[name];old=slider.blockSignals(True);slider.setValue(value);slider.blockSignals(old);self.slider_rows[name].position_value()
+            self.timer.stop();self.history_timer.stop();self.update_preview()
+        finally:self._restoring=False
+        self.commit_history();self.log.appendPlainText('Auto sky background: suggested darker display applied. Source FITS data and black point are unchanged; Undo restores the prior view. Faint nebulosity can look darker.')
+
     def reset_adjustments(self):
         self.commit_history()
         for name, slider in self.sliders.items():
@@ -796,6 +815,8 @@ class Window(W.QMainWindow):
         self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
         ready=self.linear is not None and self._history_ready
+        self.auto_sky_preview.setEnabled(ready and not busy);self.auto_sky.setEnabled(ready and not busy)
+        self.reset_crop_preview.setEnabled(ready and not busy);self.restore_crop.setEnabled(ready and not busy)
         self.labels_action.setEnabled(ready and not busy);self.labels_panel.setEnabled(ready and not busy)
         if busy:self.preview.annotation_placing=False
         self.save_stack_button.setEnabled(ready and not busy and not self.header.get('EASRASTR',False) and engine.frame_count(self.original_header)>1)
@@ -975,6 +996,8 @@ if __name__ == '__main__':
             frames.append(sample);frames.append(sample)
             assert np.array_equal(combine(frames),sample)
         window.loaded(sample, fits.Header())
+        assert window.reset_crop_preview.isEnabled() and window.auto_sky_preview.isEnabled()
+        window.auto_sky_preview.click()
         window.sliders['Background correction %'].setValue(50)
         window.reset.click()
         window.select_crop(5,0,80,60)
@@ -985,7 +1008,7 @@ if __name__ == '__main__':
         window.crop_ratio.setCurrentText('16:9')
         window.apply_crop.click()
         assert window.linear.shape[1]*9 == window.linear.shape[0]*16
-        window.restore_crop.click()
+        window.reset_crop_preview.click();assert window.crop_ratio.currentText()=='Free'
         window.preview.set_zoom(1)
         window.zoom_fit.click()
         window.update_preview()
