@@ -7,7 +7,12 @@ def histogram_data(image,valid=None):
     if valid is None:valid=np.ones(image.shape[:2],dtype=bool)
     values=image[valid]
     if not len(values):return np.zeros((3,256),dtype=np.int64),0.,0.
-    bins=np.stack([np.histogram(values[:,i],bins=256,range=(0,1))[0] for i in range(3)])
+    bins=[]
+    for channel in range(3):
+        v=values[:,channel];v=v[np.isfinite(v)&(v>=0)&(v<=1)]
+        indices=np.minimum((v*256).astype(np.int32),255)
+        bins.append(np.bincount(indices,minlength=256))
+    bins=np.stack(bins)
     return bins,float(np.mean(np.any(values<=0,axis=-1))*100),float(np.mean(np.any(values>=1,axis=-1))*100)
 
 

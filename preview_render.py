@@ -1,4 +1,5 @@
 """Bounded preview cache and rendering independent of Qt widgets."""
+from collections import OrderedDict
 import threading
 import cv2
 import numpy as np
@@ -11,17 +12,21 @@ class PreviewRenderer:
     def __init__(self):
         self.lock=threading.RLock();self.clear()
     def clear(self):
-        self.source=None;self.size=None;self.small=None;self.normalization_key=None;self.normalization=None
+        self.cache=OrderedDict();self.source=None;self.size=None;self.small=None;self.normalization_key=None;self.normalization=None
     def render(self,source,size,settings,model,gpu,mark):
         with self.lock:
-            if self.source is not source or self.size!=size:
-                self.source=source;self.size=size
-                self.small=source if size==(source.shape[1],source.shape[0]) else cv2.resize(source,size,interpolation=cv2.INTER_AREA)
-                self.normalization_key=None
+            if self.source is not source:self.clear();self.source=source
+            entry=self.cache.pop(size,None)
+            if entry is None:
+                small=source if size==(source.shape[1],source.shape[0]) else cv2.resize(source,size,interpolation=cv2.INTER_AREA)
+                entry=dict(small=small,key=None,normalization=None)
+            self.cache[size]=entry
+            while len(self.cache)>2:self.cache.popitem(last=False)
+            self.size=size;self.small=entry['small']
             key=(settings[1],settings[4],tuple(settings[5]),id(model))
-            if key!=self.normalization_key:
-                self.normalization=engine.normalize_image(self.small,settings[1],settings[4],settings[5],model)
-                self.normalization_key=key
+            if key!=entry['key']:
+                entry['normalization']=engine.normalize_image(self.small,settings[1],settings[4],settings[5],model);entry['key']=key
+            self.normalization=entry['normalization'];self.normalization_key=key
             image=engine.render(self.small,*settings,model=model,gpu=gpu,normalization=self.normalization)
             valid=self.normalization[1]
             bins,black,white=histogram_data(image,valid)

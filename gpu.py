@@ -63,6 +63,7 @@ class GpuProcessor:
         self.name = context.devices[0].name.strip()
         self.disabled = False
         self.last_error = None
+        self._image_buffers=None;self._blur_weights=None
         program = cl.Program(context, SOURCE).build()
         self.stretch_kernel = cl.Kernel(program, 'stretch_image')
         self.blur_kernel = cl.Kernel(program, 'blur_image')
@@ -75,16 +76,20 @@ class GpuProcessor:
         cl = self.cl
         source = np.ascontiguousarray(image, dtype=np.float32)
         h, w, _ = source.shape
-        a = cl.Buffer(self.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=source)
-        b = cl.Buffer(self.context, cl.mem_flags.READ_WRITE, source.nbytes)
+        if self._image_buffers is None or self._image_buffers[0]!=source.nbytes:
+            self._image_buffers=(source.nbytes,cl.Buffer(self.context,cl.mem_flags.READ_WRITE,source.nbytes),cl.Buffer(self.context,cl.mem_flags.READ_WRITE,source.nbytes))
+        _,a,b=self._image_buffers
+        cl.enqueue_copy(self.queue,a,source)
         self.stretch_kernel(self.queue, (source.size,), None, a, b, np.int32(source.size), np.float32(stretch))
         current, spare = b, a
         if denoise > 0:
             radius = int(4*denoise+.5)
-            x = np.arange(-radius,radius+1,dtype=np.float64)
-            weights = np.exp(-.5*(x/denoise)**2)
-            weights = (weights/weights.sum()).astype(np.float32)
-            weights_buffer = cl.Buffer(self.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=weights)
+            if self._blur_weights is None or self._blur_weights[0]!=denoise:
+                x = np.arange(-radius,radius+1,dtype=np.float64)
+                weights = np.exp(-.5*(x/denoise)**2)
+                weights = (weights/weights.sum()).astype(np.float32)
+                self._blur_weights=(denoise,cl.Buffer(self.context,cl.mem_flags.READ_ONLY|cl.mem_flags.COPY_HOST_PTR,hostbuf=weights))
+            weights_buffer=self._blur_weights[1]
             for vertical in (0,1):
                 self.blur_kernel(self.queue,(source.size,),None,current,spare,weights_buffer,np.int32(radius),np.int32(w),np.int32(h),np.int32(vertical))
                 current, spare = spare, current

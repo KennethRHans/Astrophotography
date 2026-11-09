@@ -1,8 +1,44 @@
-# Easy Astro Studio — 1.4.1 Store update
+# Easy Astro Studio — 1.4.2 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Live slider previews and clearer adjustment controls (1.4.2)
+
+Fixes redraw starvation while dragging: slider changes previously restarted a
+45 ms debounce timer, so continuous motion could postpone all image updates
+until the pointer paused. A non-resetting 16 ms timer now submits live changes,
+with one active worker and one latest pending request. Dragging uses a draft
+preview capped at 768 pixels per side, with a Live draft indicator. Releasing
+restores the normal zoom-dependent preview resolution; exports keep their
+existing full-resolution processing. Older settled renders cannot replace a
+newer drag preview. Draft previews are approximate and can differ from the
+settled view. Driver, zoom, image size and ongoing processing still affect speed.
+
+The renderer retains at most two resized/normalized preview sizes for the current
+source so draft/settled changes do not repeatedly discard each other's cache.
+A faster histogram retains the existing bin and clipping semantics. OpenCL image
+buffers and smoothing weights are reused under the existing lock; source pixels
+are uploaded on every call to prevent stale images. CPU fallback is unchanged.
+No stack data, exported FITS values or background neutralization behavior changes.
+
+The basic controls are Stretch, Black point, Exposure (display brightness),
+Contrast and Color saturation. Existing gradient, RGB balance, Gaussian smoothing
+and shadow/sky controls are under **Advanced: sky, color and noise** with an active
+indicator. All 11 controls and their project keys/ranges remain available. Units
+now show actual percentile, stops and smoothing pixels rather than ×100 labels.
+Old projects with non-default advanced values automatically open that section.
+Tooltips explain faint-signal clipping and that manual color gains are not
+photometric calibration. Smoothing remains a simple blur, not a star-preserving
+denoiser. Useful future additions would be midtones/curves and a carefully tested
+edge-preserving denoiser; no sharpening or star reduction is added in this update.
+
+All 97 local tests passed, covering continuous-drag redraws before mouse release,
+latest-setting delivery, histogram edge equivalence, bounded cache reuse, GPU
+buffer reuse with new pixels and changed shapes, shared GPU concurrency, old
+projects and readable units. The application smoke test passed. Windows package
+validation is in progress for 1.4.2.0.
 
 ## Gaia diagnostics, crop reset and Auto sky (1.4.1)
 

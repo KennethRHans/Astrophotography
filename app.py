@@ -169,17 +169,33 @@ class Window(W.QMainWindow):
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
         self.sliders = {}
         self.slider_rows = {}
-        self.slider_defaults = {}
-        for label, low, high, default in [('Stretch', 0, 100, 30), ('Black percentile ×100', 0, 100, 10), ('Saturation %', 0, 200, 100), ('Noise smoothing ×100', 0, 150, 0), ('Background correction %', 0, 100, 0), ('Red balance %', 50, 200, 100), ('Green balance %', 50, 200, 100), ('Blue balance %', 50, 200, 100), ('Sky background %', -100, 100, 0), ('Brightness (stops ×100)', -200, 200, 0), ('Contrast %', 25, 250, 100)]:
-            sidebar.addWidget(W.QLabel(label))
-            row = SliderValueRow(low,high,default); sidebar.addWidget(row)
-            slider = row.slider; self.sliders[label] = slider; self.slider_rows[label] = row
-            self.slider_defaults[label] = default
-            slider.valueChanged.connect(self.schedule_preview)
-            slider.sliderPressed.connect(self.commit_history)
-            slider.sliderReleased.connect(self.commit_history)
-            slider.sliderReleased.connect(self.schedule_preview)
-        hint = W.QLabel('Sky background: negative darkens shadows; positive lightens them. Darkening can hide faint nebulosity. Background correction can also suppress faint signal. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
+        self.slider_defaults = {};self.slider_labels={}
+        percent=lambda v:f'{v}%'
+        specs={
+            'Stretch':('Stretch — faint detail',0,100,30,'Asinh stretch reveals faint signal. It can brighten noise and sky as well as the target.',str),
+            'Black percentile ×100':('Black point — dark clipping',0,100,10,'Percent of the darkest samples used for the black point. Raising this can hide faint signal; watch black clipping.',lambda v:f'{v/100:.2f}%'),
+            'Brightness (stops ×100)':('Exposure — display brightness',-200,200,0,'Display exposure in stops; does not change capture exposure or linear FITS data.',lambda v:f'{v/100:+.2f} stops'),
+            'Contrast %':('Contrast',25,250,100,'Contrast around a fixed display pivot. High values can clip shadows and highlights.',percent),
+            'Saturation %':('Color saturation',0,200,100,'Changes color strength; not color calibration.',percent),
+            'Background correction %':('Gradient removal',0,100,0,'Quadratic background correction. Extended nebulosity may be mistaken for sky; use cautiously.',percent),
+            'Red balance %':('Red balance — manual',50,200,100,'Relative red-channel gain; not photometric color calibration.',percent),
+            'Green balance %':('Green balance — manual',50,200,100,'Relative green-channel gain; not photometric color calibration.',percent),
+            'Blue balance %':('Blue balance — manual',50,200,100,'Relative blue-channel gain; not photometric color calibration.',percent),
+            'Noise smoothing ×100':('Noise smoothing',0,150,0,'Gaussian smoothing can soften stars and fine structure. Leave off unless needed; this is not a star-preserving denoiser.',lambda v:f'{v/100:.2f} px'),
+            'Sky background %':('Shadows / sky brightness',-100,100,0,'Offsets darker tones, including faint nebulosity. This is not a measured sky-only mask.',lambda v:f'{v:+d}%')}
+        self.advanced_names=list(specs)[5:]
+        for index,(name,(label,low,high,default,tooltip,formatter)) in enumerate(specs.items()):
+            if index==5:
+                self.advanced_toggle=W.QToolButton();self.advanced_toggle.setText('Advanced: sky, color and noise');self.advanced_toggle.setCheckable(True);self.advanced_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon);self.advanced_toggle.setArrowType(QtCore.Qt.RightArrow);sidebar.addWidget(self.advanced_toggle)
+                self.advanced_panel=W.QWidget();advanced_layout=W.QVBoxLayout(self.advanced_panel);advanced_layout.setContentsMargins(6,2,0,2);sidebar.addWidget(self.advanced_panel);self.advanced_panel.hide()
+                self.advanced_toggle.toggled.connect(self.advanced_panel.setVisible)
+                self.advanced_toggle.toggled.connect(lambda checked:self.advanced_toggle.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow))
+            target=sidebar if index<5 else advanced_layout
+            caption=W.QLabel(label);caption.setToolTip(tooltip);self.slider_labels[name]=caption;target.addWidget(caption)
+            row=SliderValueRow(low,high,default,formatter=formatter);row.setToolTip(tooltip);target.addWidget(row)
+            slider=row.slider;self.sliders[name]=slider;self.slider_rows[name]=row;self.slider_defaults[name]=default
+            slider.valueChanged.connect(self.schedule_preview);slider.sliderPressed.connect(self.commit_history);slider.sliderReleased.connect(self.commit_history);slider.sliderReleased.connect(self.schedule_preview)
+        hint = W.QLabel('Use Stretch, Black point and Exposure first. Advanced shadow and gradient controls can suppress faint nebulosity. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.auto_sky=W.QPushButton('Auto sky background');self.auto_sky.setToolTip('Suggest a darker display using Stretch and Brightness; clears the Sky offset. Other adjustments and source data are preserved. Faint nebulosity can look darker. Undo restores the previous view.');self.auto_sky.clicked.connect(self.auto_sky_background);sidebar.addWidget(self.auto_sky)
         self.reset = W.QPushButton('Reset adjustments')
@@ -605,7 +621,7 @@ class Window(W.QMainWindow):
         self.commit_history()
     def schedule_preview(self):
         self._preview_generation+=1;self._preview_pending=True
-        self.timer.start(45)
+        if not self.timer.isActive():self.timer.start(16)
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
@@ -620,7 +636,7 @@ class Window(W.QMainWindow):
         step=max(1,int(np.floor(1/max(scale,.01))))
         size=(max(1,w//step),max(1,h//step))
         if any(slider.isSliderDown() for slider in self.sliders.values()):
-            factor=max(1,max(size)/1280);size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
+            factor=max(1,max(size)/768);size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
         return self.linear,size,self.settings(),self.background,self.gpu,self.mark_clipping.isChecked()
 
     def update_preview(self):
@@ -638,6 +654,7 @@ class Window(W.QMainWindow):
         if self.preview_worker is not None:return
         self._preview_pending=False
         self.preview_worker=PreviewWorker(self.preview_renderer,self._preview_generation,self.preview_request())
+        self.preview_worker.interactive=any(slider.isSliderDown() for slider in self.sliders.values())
         self.preview_worker.result.connect(self.preview_ready)
         self.preview_worker.failed.connect(self.preview_failed)
         self.preview_worker.finished.connect(self.preview_finished)
@@ -645,7 +662,7 @@ class Window(W.QMainWindow):
 
     def preview_ready(self,generation,result):
         same_source=self.linear is not None and self.preview_worker is not None and self.preview_worker.request[0] is self.linear
-        if same_source and not self._close_after_preview and (generation==self._preview_generation or any(slider.isSliderDown() for slider in self.sliders.values())):
+        if same_source and not self._close_after_preview and (generation==self._preview_generation or (getattr(self.preview_worker,'interactive',False) and any(slider.isSliderDown() for slider in self.sliders.values()))):
             self.apply_preview(result);self.report_gpu_failure()
 
     def preview_failed(self,generation,text):
@@ -668,6 +685,7 @@ class Window(W.QMainWindow):
         image=QtGui.QImage(pixels.data,pixels.shape[1],pixels.shape[0],pixels.strides[0],QtGui.QImage.Format_RGB888).copy()
         self.preview.set_image(image,result['source_size'])
         self.refresh_label_overlay()
+        self.zoom_label.setText(f'{self.preview.transform().m11()*100:.0f}%'+(' • Live draft' if any(slider.isSliderDown() for slider in self.sliders.values()) else ''))
 
     def identify_objects(self):
         if self.linear is None or self.worker is not None or self.project_worker is not None:return
@@ -811,6 +829,7 @@ class Window(W.QMainWindow):
     def update_actions(self):
         if not hasattr(self,'undo_action'):return
         busy=self.worker is not None or self.project_worker is not None
+        self.advanced_toggle.setText('Advanced: sky, color and noise'+(' • active' if any(self.sliders[name].value()!=self.slider_defaults[name] for name in self.advanced_names) else ''))
         self.review.setEnabled(not busy and self.files.count()>0)
         self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
@@ -922,6 +941,7 @@ class Window(W.QMainWindow):
             self.files.clear();self.files.addItems(meta.get('input_files',[]))
             if self.bayer.findText(meta.get('bayer','Auto'))>=0:self.bayer.setCurrentText(meta.get('bayer','Auto'))
             self.apply_edit_state(meta['state'])
+            if any(meta['state']['sliders'][name]!=self.slider_defaults[name] for name in self.advanced_names):self.advanced_toggle.setChecked(True)
             history=meta.get('history')
             if history:self.history.states=copy.deepcopy(history['states']);self.history.index=history['index']
             else:self.history.reset(self.edit_state())
