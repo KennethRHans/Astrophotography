@@ -39,6 +39,18 @@ FITS export. A local CPU fit-view check with noise reduction enabled displayed
 47 updates during a roughly 0.6-second drag and showed the final settings; this
 is not a Windows GPU benchmark or a frame-rate guarantee.
 
+Windows validation passed: packaged application smoke checks, development and
+exact Store-identity installation/activation, Program Files/desktop shortcut
+installation and upgrade from the earlier app. The public Gaia protocol check
+also passed.
+
+[Download the 1.5.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13716969218).
+Extract and run `installer/EasyAstroStudio-1.5.0-Setup.exe`.
+
+[Download the 1.5.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13717786733).
+Extract and upload `EasyAstroStudio-1.5.0-x64-Store-UNSIGNED.msix` to Partner Center.
+Test the adjustments on your own Windows images before submitting.
+
 ## Live slider previews and clearer adjustment controls (1.4.2)
 
 Fixes redraw starvation while dragging: slider changes previously restarted a
