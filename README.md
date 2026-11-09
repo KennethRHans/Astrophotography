@@ -46,14 +46,22 @@ use amber. The status banner and action buttons stay visible. The top controls
 use their full natural height with no nested scroll area, in a larger window.
 Smaller displays can scroll the whole content while retaining status/buttons.
 
-Public Gaia query access from this development workspace was unavailable. The
-Windows workflow includes a non-gating, bounded public Gaia query check using
-an arbitrary M31 region (no user image, key or private metadata). Core tests use
-representative CSV responses and synthetic astrometric matching. Windows
-package validation is in progress for version 1.4.0.0. All 86 local tests
-passed, including proper-motion matching, exact source IDs, one-to-one matches,
-consent gating, Gaia failure fallback, project reopening and in-app privacy
-entry points. The application smoke test passed.
+All 86 local tests passed, including proper-motion matching, exact source IDs,
+one-to-one matches, consent gating, Gaia failure fallback, project reopening and
+in-app privacy entry points. The Windows workflow also passed a live public
+Gaia DR3 query using an arbitrary M31 region (no user image, key or private
+metadata). Direct workspace query access was unavailable; the real protocol was
+verified by the Windows runner. Windows tests, packaged Gaia/privacy smoke
+checks, exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade checks passed for version 1.4.0.0.
+
+[Download the 1.4.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42631456034/artifacts/13681786884).
+Extract and run `installer/EasyAstroStudio-1.4.0-Setup.exe`.
+
+[Download the 1.4.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42631456034/artifacts/13681107276).
+Extract and upload `EasyAstroStudio-1.4.0-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. The privacy-policy URL remains
+the same; its updated contents are also bundled in the app.
 
 ## Astrometry.net queued-submission fix (1.3.2)
 
