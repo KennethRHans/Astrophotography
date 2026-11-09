@@ -57,6 +57,8 @@ def validate_state(state,shape,slider_ranges=None):
     from annotations import validate_annotations
     validate_annotations(state.get('annotations',[]),shape)
     if type(state.get('labels_visible',True)) is not bool:raise ValueError('Invalid label visibility')
+    from astro_adjustments import validate_curve,NEUTRAL_CURVE
+    validate_curve(state.get('curve',list(NEUTRAL_CURVE)))
     return state
 
 

@@ -34,6 +34,11 @@ def test_opencl_matches_cpu_adjustments():
         actual=engine.render(image,stretch=30,saturation=1.3,denoise=smoothing,gpu=processor,brightness=brightness,contrast=contrast,sky=sky)
         assert not processor.disabled,processor.last_error
         np.testing.assert_allclose(actual,cpu,atol=3e-5,rtol=3e-5)
+    settings=dict(midtones=.35,star_denoise=.6,star_protection=1,curve=(0,200,650,850,1000))
+    cpu=engine.render(image,**settings)
+    actual=engine.render(image,gpu=processor,**settings)
+    assert not processor.disabled,processor.last_error
+    np.testing.assert_allclose(actual,cpu,atol=3e-5,rtol=3e-5)
 
 
 def test_shared_opencl_processor_is_safe_for_background_preview_and_export():

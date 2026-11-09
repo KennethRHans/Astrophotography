@@ -1,8 +1,43 @@
-# Easy Astro Studio — 1.4.2 Store update
+# Easy Astro Studio — 1.5.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Midtones, tone curves and protected noise reduction (1.5.0)
+
+Step 4 now includes **Midtones — faint detail**, **Noise reduction — star/edge
+protected**, and a tone curve with three draggable points for shadows, midtones
+and highlights. Raise midtones to brighten faint detail; lower it to darken.
+The curve has fixed black/white endpoints and stays monotone to avoid tonal
+reversals. Both act on luminance with common RGB scaling to retain color ratios.
+**Reset curve**, Reset adjustments, Undo/Redo and saved projects include these
+controls. Older projects open with neutral midtones/curve and noise reduction off.
+
+Noise reduction uses floating-point edge-aware bilateral filtering before
+stretching, blended with a soft mask around detected bright structures. Start
+at 20–40% and inspect at 100%. **Star protection** defaults to 100% in Advanced.
+Detected star cores are protected, but strong settings can still alter faint
+sources or diffuse detail; this is not a photometric or hot-pixel correction.
+The old Gaussian control remains as **Legacy smoothing — ordinary blur** for old
+projects. Leave it at zero when using the new protected denoiser.
+
+The new filter and tone tools run locally on the CPU, including with GPU enabled;
+existing GPU stretch/color processing remains active. The renderer caches the
+filtered draft and settled previews so midtones, curve and other display edits
+do not rerun noise filtering unnecessarily. Dragging retains the coalesced live
+draft preview; release and raster exports apply the final requested adjustments.
+Full-resolution JPG/PNG/TIFF exports include the new tools. Linear FITS exports
+retain original stacked values and are unaffected by display adjustments.
+No data collection or network behavior has changed.
+
+All 103 local tests and the application smoke test passed. Coverage includes
+neutral tone identity, monotone curves, RGB ratios, synthetic-star core retention,
+background noise reduction, CPU/OpenCL agreement, filtered-preview cache reuse,
+curve drag/Undo/reset, project round trips and migration, and unchanged linear
+FITS export. A local CPU fit-view check with noise reduction enabled displayed
+47 updates during a roughly 0.6-second drag and showed the final settings; this
+is not a Windows GPU benchmark or a frame-rate guarantee.
 
 ## Live slider previews and clearer adjustment controls (1.4.2)
 
@@ -31,8 +66,7 @@ now show actual percentile, stops and smoothing pixels rather than ×100 labels.
 Old projects with non-default advanced values automatically open that section.
 Tooltips explain faint-signal clipping and that manual color gains are not
 photometric calibration. Smoothing remains a simple blur, not a star-preserving
-denoiser. Useful future additions would be midtones/curves and a carefully tested
-edge-preserving denoiser; no sharpening or star reduction is added in this update.
+denoiser. Version 1.5.0 adds midtones, curves and protected noise reduction as described above.
 
 All 97 local tests passed, covering continuous-drag redraws before mouse release,
 latest-setting delivery, histogram edge equivalence, bounded cache reuse, GPU

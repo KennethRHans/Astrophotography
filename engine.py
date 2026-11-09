@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter
 import tifffile
 from PIL import Image
 from stack_store import AlignedFrames, combine
+from astro_adjustments import NEUTRAL_CURVE,tone_adjust,star_preserving_denoise
 
 
 def read_fits(path, bayer='Auto'):
@@ -201,21 +202,23 @@ def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
 
 
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, model=None, gpu=None,normalization=None):
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, midtones=0, star_denoise=0, star_protection=1, curve=NEUTRAL_CURVE, model=None, gpu=None,normalization=None,prepared=None):
     image,valid=normalization if normalization is not None else normalize_image(linear,black,gradient,gains,model)
     if not np.any(valid):return np.zeros_like(image)
+    image=prepared if prepared is not None else star_preserving_denoise(image,star_denoise,star_protection,valid)
     if gpu is not None and not gpu.disabled:
         try:
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
             if not np.isfinite(result).all():
                 raise RuntimeError('GPU returned nonfinite pixels')
-            result=adjust_sky(result,sky)
-            result[~valid] = 0
-            return result
         except Exception as exc:
             gpu.disabled = True
             gpu.last_error = str(exc)
             # Re-run from the same normalized image on CPU after a GPU failure.
+        else:
+            result=tone_adjust(adjust_sky(result,sky),midtones,curve)
+            result[~valid] = 0
+            return result
     image = np.arcsinh(image*stretch)/np.arcsinh(stretch) if stretch > 0 else image
     if denoise:
         image = gaussian_filter(image, sigma=(denoise, denoise, 0))
@@ -223,7 +226,7 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
     if brightness != 0 or contrast != 1:
         image = np.clip((image*(2.**brightness)-.18)*contrast+.18,0,1)
-    image=adjust_sky(image,sky)
+    image=tone_adjust(adjust_sky(image,sky),midtones,curve)
     image[~valid] = 0
     return image
 

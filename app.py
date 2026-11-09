@@ -22,6 +22,8 @@ from frame_review import FrameReviewDialog
 from preview_render import PreviewRenderer,PreviewWorker
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
+from tone_curve import ToneCurve
+from astro_adjustments import NEUTRAL_CURVE
 
 
 class Worker(QtCore.QThread):
@@ -177,29 +179,37 @@ class Window(W.QMainWindow):
             'Brightness (stops ×100)':('Exposure — display brightness',-200,200,0,'Display exposure in stops; does not change capture exposure or linear FITS data.',lambda v:f'{v/100:+.2f} stops'),
             'Contrast %':('Contrast',25,250,100,'Contrast around a fixed display pivot. High values can clip shadows and highlights.',percent),
             'Saturation %':('Color saturation',0,200,100,'Changes color strength; not color calibration.',percent),
+            'Midtones %':('Midtones — faint detail',-100,100,0,'Positive values brighten intermediate tones; negative values darken them. Black/white endpoints are fixed. Uses a luminance midtones transfer.',lambda v:f'{v:+d}%'),
+            'Star-preserving noise reduction %':('Noise reduction — star/edge protected',0,100,0,'Edge-aware noise reduction with a protective mask. Start low. Strong settings can still suppress faint detail; this is not a substitute for calibration or more exposure.',percent),
             'Background correction %':('Gradient removal',0,100,0,'Quadratic background correction. Extended nebulosity may be mistaken for sky; use cautiously.',percent),
             'Red balance %':('Red balance — manual',50,200,100,'Relative red-channel gain; not photometric color calibration.',percent),
             'Green balance %':('Green balance — manual',50,200,100,'Relative green-channel gain; not photometric color calibration.',percent),
             'Blue balance %':('Blue balance — manual',50,200,100,'Relative blue-channel gain; not photometric color calibration.',percent),
-            'Noise smoothing ×100':('Noise smoothing',0,150,0,'Gaussian smoothing can soften stars and fine structure. Leave off unless needed; this is not a star-preserving denoiser.',lambda v:f'{v/100:.2f} px'),
+            'Star protection %':('Noise reduction — star protection',0,100,100,'Protection of detected bright structures and nearby wings. 100% is recommended. Very faint stars may not enter the mask.',percent),
+            'Noise smoothing ×100':('Legacy smoothing — ordinary blur',0,150,0,'Gaussian smoothing can soften stars and fine structure. Leave off unless needed; this is not a star-preserving denoiser.',lambda v:f'{v/100:.2f} px'),
             'Sky background %':('Shadows / sky brightness',-100,100,0,'Offsets darker tones, including faint nebulosity. This is not a measured sky-only mask.',lambda v:f'{v:+d}%')}
-        self.advanced_names=list(specs)[5:]
+        self.advanced_names=list(specs)[7:]
         for index,(name,(label,low,high,default,tooltip,formatter)) in enumerate(specs.items()):
-            if index==5:
+            if index==7:
                 self.advanced_toggle=W.QToolButton();self.advanced_toggle.setText('Advanced: sky, color and noise');self.advanced_toggle.setCheckable(True);self.advanced_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon);self.advanced_toggle.setArrowType(QtCore.Qt.RightArrow);sidebar.addWidget(self.advanced_toggle)
                 self.advanced_panel=W.QWidget();advanced_layout=W.QVBoxLayout(self.advanced_panel);advanced_layout.setContentsMargins(6,2,0,2);sidebar.addWidget(self.advanced_panel);self.advanced_panel.hide()
                 self.advanced_toggle.toggled.connect(self.advanced_panel.setVisible)
                 self.advanced_toggle.toggled.connect(lambda checked:self.advanced_toggle.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow))
-            target=sidebar if index<5 else advanced_layout
+            target=sidebar if index<7 else advanced_layout
             caption=W.QLabel(label);caption.setToolTip(tooltip);self.slider_labels[name]=caption;target.addWidget(caption)
             row=SliderValueRow(low,high,default,formatter=formatter);row.setToolTip(tooltip);target.addWidget(row)
             slider=row.slider;self.sliders[name]=slider;self.slider_rows[name]=row;self.slider_defaults[name]=default
             slider.valueChanged.connect(self.schedule_preview);slider.sliderPressed.connect(self.commit_history);slider.sliderReleased.connect(self.commit_history);slider.sliderReleased.connect(self.schedule_preview)
+        self.curve_group=W.QGroupBox('Luminance curve — shadows, midtones, highlights');curve_layout=W.QVBoxLayout(self.curve_group);sidebar.addWidget(self.curve_group)
+        self.curve=ToneCurve();curve_layout.addWidget(self.curve)
+        curve_hint=W.QLabel('Drag the three interior points up/down. Black and white stay fixed.');curve_hint.setWordWrap(True);curve_layout.addWidget(curve_hint)
+        self.reset_curve=W.QPushButton('Reset curve');self.reset_curve.clicked.connect(self.reset_tone_curve);curve_layout.addWidget(self.reset_curve)
+        self.curve.editStarted.connect(self.commit_history);self.curve.editFinished.connect(self.commit_history);self.curve.editFinished.connect(self.schedule_preview);self.curve.changed.connect(self.schedule_preview)
         hint = W.QLabel('Use Stretch, Black point and Exposure first. Advanced shadow and gradient controls can suppress faint nebulosity. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
         self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.auto_sky=W.QPushButton('Auto sky background');self.auto_sky.setToolTip('Suggest a darker display using Stretch and Brightness; clears the Sky offset. Other adjustments and source data are preserved. Faint nebulosity can look darker. Undo restores the previous view.');self.auto_sky.clicked.connect(self.auto_sky_background);sidebar.addWidget(self.auto_sky)
         self.reset = W.QPushButton('Reset adjustments')
-        self.reset.setToolTip('Restore all sliders to their starting values')
+        self.reset.setToolTip('Restore all sliders and the tone curve to their starting values')
         self.reset.clicked.connect(self.reset_adjustments)
         sidebar.addWidget(self.reset)
         self.crop_group = W.QGroupBox('Crop — drag edges or corners in the image')
@@ -394,7 +404,7 @@ class Window(W.QMainWindow):
         self.project_path=None;self.source_name='image';self.source_paths=[]
         self.pending_source_paths=[];self.pending_source_name='image';self.files.clear()
         self.history=EditHistory();self._saved_signature=None;self._dirty=False
-        self.applied_crop=(0,0,0,0);self.crop_bounds=(0,0,0,0)
+        self.applied_crop=(0,0,0,0);self.crop_bounds=(0,0,0,0);self.curve.set_values(NEUTRAL_CURVE)
         for name,slider in self.sliders.items():
             old=slider.blockSignals(True);slider.setValue(self.slider_defaults[name]);slider.blockSignals(old);self.slider_rows[name].position_value()
         for widget,value in ((self.baseline,False),(self.mark_clipping,False),(self.crop_ratio,'Free'),(self.guides,'Thirds + rulers')):
@@ -482,6 +492,7 @@ class Window(W.QMainWindow):
         self.linear, self.header = linear, header
         self.reset_crop_controls()
         self.background = self.make_background(linear)
+        self.curve.set_values(NEUTRAL_CURVE)
         for name,slider in self.sliders.items():
             value=0 if header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name]
             old=slider.blockSignals(True);slider.setValue(value);slider.blockSignals(old);self.slider_rows[name].position_value()
@@ -611,11 +622,17 @@ class Window(W.QMainWindow):
         finally:self._restoring=False
         self.commit_history();self.log.appendPlainText('Auto sky background: suggested darker display applied. Source FITS data and black point are unchanged; Undo restores the prior view. Faint nebulosity can look darker.')
 
+    def reset_tone_curve(self):
+        if self.linear is None:return
+        self.commit_history();self.curve.set_values(NEUTRAL_CURVE);self.update_preview();self.commit_history()
+    def is_preview_interactive(self):
+        return any(slider.isSliderDown() for slider in self.sliders.values()) or self.curve.dragging
     def reset_adjustments(self):
         self.commit_history()
         for name, slider in self.sliders.items():
             slider.setValue(0 if self.header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name])
         self.baseline.setChecked(False)
+        self.curve.set_values(NEUTRAL_CURVE)
         self.timer.stop()
         self.update_preview()
         self.commit_history()
@@ -625,17 +642,17 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return (0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0)
+        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
-                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100)
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values))
     def preview_request(self):
         h,w,_=self.linear.shape
         scale=max(self.preview.transform().m11(),.01)
         if self.preview.item.pixmap().isNull():scale=min(self.preview.viewport().width()/w,self.preview.viewport().height()/h)
         step=max(1,int(np.floor(1/max(scale,.01))))
         size=(max(1,w//step),max(1,h//step))
-        if any(slider.isSliderDown() for slider in self.sliders.values()):
+        if self.is_preview_interactive():
             factor=max(1,max(size)/768);size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
         return self.linear,size,self.settings(),self.background,self.gpu,self.mark_clipping.isChecked()
 
@@ -654,7 +671,7 @@ class Window(W.QMainWindow):
         if self.preview_worker is not None:return
         self._preview_pending=False
         self.preview_worker=PreviewWorker(self.preview_renderer,self._preview_generation,self.preview_request())
-        self.preview_worker.interactive=any(slider.isSliderDown() for slider in self.sliders.values())
+        self.preview_worker.interactive=self.is_preview_interactive()
         self.preview_worker.result.connect(self.preview_ready)
         self.preview_worker.failed.connect(self.preview_failed)
         self.preview_worker.finished.connect(self.preview_finished)
@@ -662,7 +679,7 @@ class Window(W.QMainWindow):
 
     def preview_ready(self,generation,result):
         same_source=self.linear is not None and self.preview_worker is not None and self.preview_worker.request[0] is self.linear
-        if same_source and not self._close_after_preview and (generation==self._preview_generation or (getattr(self.preview_worker,'interactive',False) and any(slider.isSliderDown() for slider in self.sliders.values()))):
+        if same_source and not self._close_after_preview and (generation==self._preview_generation or (getattr(self.preview_worker,'interactive',False) and self.is_preview_interactive())):
             self.apply_preview(result);self.report_gpu_failure()
 
     def preview_failed(self,generation,text):
@@ -685,7 +702,7 @@ class Window(W.QMainWindow):
         image=QtGui.QImage(pixels.data,pixels.shape[1],pixels.shape[0],pixels.strides[0],QtGui.QImage.Format_RGB888).copy()
         self.preview.set_image(image,result['source_size'])
         self.refresh_label_overlay()
-        self.zoom_label.setText(f'{self.preview.transform().m11()*100:.0f}%'+(' • Live draft' if any(slider.isSliderDown() for slider in self.sliders.values()) else ''))
+        self.zoom_label.setText(f'{self.preview.transform().m11()*100:.0f}%'+(' • Live draft' if self.is_preview_interactive() else ''))
 
     def identify_objects(self):
         if self.linear is None or self.worker is not None or self.project_worker is not None:return
@@ -812,7 +829,7 @@ class Window(W.QMainWindow):
             self.log.appendPlainText('Saved '+path)
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
     def edit_state(self):
-        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},compare=self.baseline.isChecked(),
+        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},curve=list(self.curve.values),compare=self.baseline.isChecked(),
                     annotations=copy.deepcopy(self.annotations),labels_visible=self.labels_visible,applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
     def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
@@ -820,7 +837,7 @@ class Window(W.QMainWindow):
         return json.dumps(dict(state=self.edit_state(),bayer=self.bayer.currentText(),identification_wcs=self.solution_header.tostring(sep='\n',endcard=True,padding=False) if self.solution_header is not None else None),sort_keys=True)+'|'+self._files_json
     def schedule_history(self):
         if self._history_ready and not self._restoring:
-            if self.preview.mode is not None or any(slider.isSliderDown() for slider in self.sliders.values()):self.history_timer.stop()
+            if self.preview.mode is not None or self.is_preview_interactive():self.history_timer.stop()
             else:self.history_timer.start(400)
             self.update_actions()
     def commit_history(self):
@@ -861,6 +878,7 @@ class Window(W.QMainWindow):
                 x0,y0,x1,y1=rect;h,w,_=self.original_linear.shape
                 self.linear,self.header=engine.crop_image(self.original_linear,self.original_header,x0,w-x1,y0,h-y1)
                 self.applied_crop=rect;self.background=self.make_background(self.linear)
+            self.curve.set_values(state.get('curve',list(NEUTRAL_CURVE)))
             self.annotations=copy.deepcopy(state.get('annotations',[]));self.labels_visible=state.get('labels_visible',True);self.refresh_labels()
             for name,value in state['sliders'].items():
                 widget=self.sliders[name];previous=widget.blockSignals(True);widget.setValue(value);widget.blockSignals(previous)
@@ -930,6 +948,7 @@ class Window(W.QMainWindow):
             linear,header,meta=payload
             for state in [meta['state'],*meta.get('history',{}).get('states',[])]:
                 state['sliders'].setdefault('Sky background %',0);state.setdefault('annotations',[]);state.setdefault('labels_visible',True)
+                state['sliders'].setdefault('Midtones %',0);state['sliders'].setdefault('Star-preserving noise reduction %',0);state['sliders'].setdefault('Star protection %',100);state.setdefault('curve',list(NEUTRAL_CURVE))
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
             self.loaded(linear,header)
@@ -1031,6 +1050,11 @@ if __name__ == '__main__':
         window.reset_crop_preview.click();assert window.crop_ratio.currentText()=='Free'
         window.preview.set_zoom(1)
         window.zoom_fit.click()
+        window.sliders['Midtones %'].setValue(30)
+        window.sliders['Star-preserving noise reduction %'].setValue(40)
+        window.curve.set_values((0,200,600,850,1000),emit=True)
+        noise_sample=np.random.default_rng(15).uniform(100,200,sample.shape).astype(np.float32)
+        assert np.isfinite(engine.render(noise_sample,*window.settings())).all()
         window.update_preview()
         app.processEvents()
         import tempfile,time
