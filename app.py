@@ -1153,6 +1153,14 @@ if __name__ == '__main__':
         window.curve.set_values((0,200,600,850,1000),emit=True)
         noise_sample=np.random.default_rng(15).uniform(100,200,sample.shape).astype(np.float32)
         assert np.isfinite(engine.render(noise_sample,*window.settings())).all()
+        if sys.platform == 'darwin' and metal.MTLCreateSystemDefaultDevice():
+            window.use_gpu.setChecked(True)
+            assert window.gpu is not None, window.log.toPlainText()
+            cpu_advanced=engine.render(noise_sample,*window.settings())
+            metal_advanced=engine.render(noise_sample,*window.settings(),gpu=window.gpu)
+            assert not window.gpu.disabled, window.gpu.last_error
+            np.testing.assert_allclose(metal_advanced,cpu_advanced,atol=3e-5,rtol=3e-5)
+            window.use_gpu.setChecked(False)
         window.update_preview()
         app.processEvents()
         import tempfile,time
