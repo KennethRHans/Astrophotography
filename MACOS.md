@@ -1,4 +1,4 @@
-# macOS preview
+# macOS 1.5.0 preview
 
 This is a desktop preview with optional Metal image adjustments, not a Mac App Store submission.
 Build on macOS with Python 3.12 and Xcode command line tools:
@@ -14,7 +14,8 @@ dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio --smoke-test
 The app is built for the build machine's architecture. The GitHub macOS
 workflow runs the existing tests, builds the app, exercises the bundled GUI,
 and uploads a ZIP. It does not publish a release or submit to Apple.
-The bundle identifier is provisional and must match the eventual Apple record.
+The bundle ID is `com.astrivanta.easyastrostudio` (registered Apple ID
+`6832157430`, Team `XHRHMQ4A9G`). Distribution signing remains separate.
 The build has only an ad hoc development signature; it is not notarized.
 
 Use a runtime environment without pytest for packaging. If you installed pytest
@@ -150,3 +151,40 @@ groups, sorting, highest-score selection, cancellation and Use as reference.
 Using a reference moves that exposure to the first position without removing
 other exposures or replacing the edited main image. Review analysis does not
 automatically reject or remove exposures; use Remove selected in the main list.
+
+## Windows 1.5.0 integration
+
+Merged Windows source `133591e` into the Mac branch rather than converting the
+Windows installer. Shared features include:
+
+- Responsive coalesced draft/final preview rendering and bounded caches.
+- JPG/PNG opening, full linear-stack FITS saves and completion sound preference.
+- Manual labels, label styling/Undo/project storage and labeled JPG/PNG copies.
+- Offline catalog projection using WCS, optional consent-based Astrometry.net
+  source-list solving, and optional consent-based Gaia DR3 candidate matching.
+- Embedded privacy policy, catalog attribution, clearer image/solve diagnostics.
+- Auto sky, visible full crop reset, friendly slider units and Advanced controls.
+- Midtones, monotone luminance curves and star-protected noise reduction.
+
+Mac adaptations retained: Metal stretch/color/smoothing with CPU fallback,
+App Sandbox entitlements, security-scoped native import/export panels,
+coordinated atomic project saves, remembered folder/GPU/theme preferences,
+Command shortcuts, New Project in the existing window and Dock restore.
+The new stack/labeled-copy saves also use native scoped panels. The retained
+Sky exposure control preserves the earlier Mac sky curve independently of the
+Windows Shadows/sky brightness control. Older Mac and Windows project histories
+are migrated with neutral defaults for new adjustments. Reference-output fixtures
+compare Windows 1.5 rendering and the previous Mac sky-exposure rendering.
+
+The online clients verify HTTPS using system roots plus bundled certifi roots,
+so the sandboxed app does not depend on an external Python certificate directory.
+No live image/source-list uploads are part of the automated tests. Packaged
+smoke checks use an offline WCS/catalog and synthetic Gaia candidates; real
+online solving/matching must be tested deliberately with the relevant consent.
+Mac stack alignment/combining remain on CPU. The new tone and protected-noise
+operations also run on CPU, matching Windows 1.5's processing order.
+
+Before App Store submission, repeat import/stack, all exports, project/history
+round trips, live slider/curve editing, labels, offline identification, optional
+online services, and minimize/Dock restore on physical Apple Silicon hardware.
+This remains an ad hoc signed development package, not a submission package.

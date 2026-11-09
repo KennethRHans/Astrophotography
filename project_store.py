@@ -56,6 +56,11 @@ def validate_state(state,shape,slider_ranges=None):
     if type(state.get('compare')) is not bool:raise ValueError('Invalid comparison setting')
     for key in ('ratio','guides'):
         if not isinstance(state.get(key),str) or len(state[key])>100:raise ValueError('Invalid view setting')
+    from annotations import validate_annotations
+    validate_annotations(state.get('annotations',[]),shape)
+    if type(state.get('labels_visible',True)) is not bool:raise ValueError('Invalid label visibility')
+    from astro_adjustments import validate_curve,NEUTRAL_CURVE
+    validate_curve(state.get('curve',list(NEUTRAL_CURVE)))
     return state
 
 
@@ -113,6 +118,8 @@ def load_project(path):
             if not isinstance(files,list) or len(files)>10000 or any(not isinstance(p,str) or len(p)>4096 for p in files):raise ValueError('Invalid input file list')
         if not isinstance(meta.get('source_name','image'),str) or len(meta.get('source_name','image'))>4096:raise ValueError('Invalid source name')
         if meta.get('bayer','Auto') not in ('Auto','None','RGGB','BGGR','GRBG','GBRG'):raise ValueError('Invalid Bayer setting')
+        solution=meta.get('identification_wcs')
+        if solution is not None and (not isinstance(solution,str) or len(solution)>100000):raise ValueError('Invalid identification sky solution')
         view=meta.get('view',{})
         if not isinstance(view,dict):raise ValueError('Invalid saved view')
         for key in ('fit','gpu','mark_clipping'):

@@ -2,7 +2,8 @@
 import json
 import re
 from PySide6 import QtCore, QtGui, QtNetwork, QtWidgets as W
-from community_links import FEEDBACK_URL,PRIVACY_URL
+from community_links import FEEDBACK_URL
+from privacy_viewer import show_privacy
 
 from app_version import VERSION as APP_VERSION
 
@@ -36,9 +37,7 @@ class FeedbackDialog(W.QDialog):
         self.send.clicked.connect(self.submit);self.buttons.rejected.connect(self.reject);layout.addWidget(self.buttons)
         self.timeout = QtCore.QTimer(self);self.timeout.setSingleShot(True);self.timeout.setInterval(30000);self.timeout.timeout.connect(self.abort_timeout)
 
-    def open_privacy(self):
-        if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(PRIVACY_URL)):
-            self.status.setText('Open the privacy policy in your browser: '+PRIVACY_URL)
+    def open_privacy(self):show_privacy(self)
 
     def submit(self):
         if self.reply is not None:return

@@ -25,7 +25,7 @@ def main():
         '--add-data', 'assets:assets', '--hidden-import', 'sep',
         '--add-data', 'macos/adjustments.metal:macos',
         '--add-binary', str(metal_library)+':.',
-        '--collect-submodules', 'skimage.transform',
+        '--collect-submodules', 'skimage.transform', '--collect-data', 'certifi',
         '--exclude-module', 'pyopencl', '--exclude-module', 'pytest',
         'app.py',
     ], check=True)

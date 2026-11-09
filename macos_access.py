@@ -42,8 +42,8 @@ EXPORT_FORMATS = (
 _export_controller = None
 
 
-def apply_export_format(panel, index):
-    extensions = EXPORT_FORMATS[index][1]
+def apply_export_format(panel, index, formats=EXPORT_FORMATS):
+    extensions = formats[index][1]
     name = str(panel.nameFieldStringValue())
     if not Path(name).name:
         name = 'image'
@@ -51,7 +51,7 @@ def apply_export_format(panel, index):
     panel.setNameFieldStringValue_(str(Path(name).with_suffix('.' + extensions[0])))
 
 
-def export_panel(default_name):
+def export_panel(default_name, formats=EXPORT_FORMATS):
     """Construct a native save panel with a visible format accessory."""
     from AppKit import NSSavePanel, NSView, NSTextField, NSPopUpButton
     from Foundation import NSObject, NSMakeRect
@@ -59,7 +59,7 @@ def export_panel(default_name):
     if _export_controller is None:
         class EasyAstroExportFormatController(NSObject):
             def formatChanged_(self, sender):
-                apply_export_format(self.panel, int(sender.indexOfSelectedItem()))
+                apply_export_format(self.panel, int(sender.indexOfSelectedItem()), self.formats)
         _export_controller = EasyAstroExportFormatController
 
     panel = NSSavePanel.savePanel()
@@ -72,23 +72,24 @@ def export_panel(default_name):
     label = NSTextField.labelWithString_('Format:')
     label.setFrame_(NSMakeRect(0, 12, 65, 22))
     popup = NSPopUpButton.alloc().initWithFrame_pullsDown_(NSMakeRect(70, 8, 365, 28), False)
-    popup.addItemsWithTitles_([name for name, extensions in EXPORT_FORMATS])
+    popup.addItemsWithTitles_([name for name, extensions in formats])
     controller = _export_controller.alloc().init()
     controller.panel = panel
+    controller.formats = formats
     popup.setTarget_(controller)
     popup.setAction_('formatChanged:')
     accessory.addSubview_(label)
     accessory.addSubview_(popup)
     panel.setAccessoryView_(accessory)
-    apply_export_format(panel, 0)
+    apply_export_format(panel, 0, formats)
     # Cocoa controls do not retain their target. The caller keeps this tuple
     # alive throughout runModal so changing the popup remains safe.
     return panel, controller, popup
 
 
-def select_export_file(default_name):
+def select_export_file(default_name, formats=EXPORT_FORMATS):
     from AppKit import NSModalResponseOK
-    panel, controller, popup = export_panel(default_name)
+    panel, controller, popup = export_panel(default_name, formats)
     if panel.runModal() != NSModalResponseOK:
         return ''
     return file_access.retain(panel.URL())

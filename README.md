@@ -1,8 +1,422 @@
-# Easy Astro Studio — 1.0.1 Store submission candidate
+# Easy Astro Studio — 1.5.0
+
+This branch integrates Windows 1.5.0 source (`133591e`) with the Apple Silicon
+Mac app. See [MACOS.md](MACOS.md) for sandbox preview builds and validation.
+The Windows release notes below describe the shared features; Mac GPU
+adjustments use Metal and Mac file access uses native security-scoped panels.
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Midtones, tone curves and protected noise reduction (1.5.0)
+
+Step 4 now includes **Midtones — faint detail**, **Noise reduction — star/edge
+protected**, and a tone curve with three draggable points for shadows, midtones
+and highlights. Raise midtones to brighten faint detail; lower it to darken.
+The curve has fixed black/white endpoints and stays monotone to avoid tonal
+reversals. Both act on luminance with common RGB scaling to retain color ratios.
+**Reset curve**, Reset adjustments, Undo/Redo and saved projects include these
+controls. Older projects open with neutral midtones/curve and noise reduction off.
+
+Noise reduction uses floating-point edge-aware bilateral filtering before
+stretching, blended with a soft mask around detected bright structures. Start
+at 20–40% and inspect at 100%. **Star protection** defaults to 100% in Advanced.
+Detected star cores are protected, but strong settings can still alter faint
+sources or diffuse detail; this is not a photometric or hot-pixel correction.
+The old Gaussian control remains as **Legacy smoothing — ordinary blur** for old
+projects. Leave it at zero when using the new protected denoiser.
+
+The new filter and tone tools run locally on the CPU, including with GPU enabled;
+existing GPU stretch/color processing remains active. The renderer caches the
+filtered draft and settled previews so midtones, curve and other display edits
+do not rerun noise filtering unnecessarily. Dragging retains the coalesced live
+draft preview; release and raster exports apply the final requested adjustments.
+Full-resolution JPG/PNG/TIFF exports include the new tools. Linear FITS exports
+retain original stacked values and are unaffected by display adjustments.
+No data collection or network behavior has changed.
+
+All 103 local tests and the application smoke test passed. Coverage includes
+neutral tone identity, monotone curves, RGB ratios, synthetic-star core retention,
+background noise reduction, CPU/OpenCL agreement, filtered-preview cache reuse,
+curve drag/Undo/reset, project round trips and migration, and unchanged linear
+FITS export. A local CPU fit-view check with noise reduction enabled displayed
+47 updates during a roughly 0.6-second drag and showed the final settings; this
+is not a Windows GPU benchmark or a frame-rate guarantee.
+
+Windows validation passed: packaged application smoke checks, development and
+exact Store-identity installation/activation, Program Files/desktop shortcut
+installation and upgrade from the earlier app. The public Gaia protocol check
+also passed.
+
+[Download the 1.5.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13716969218).
+Extract and run `installer/EasyAstroStudio-1.5.0-Setup.exe`.
+
+[Download the 1.5.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13717786733).
+Extract and upload `EasyAstroStudio-1.5.0-x64-Store-UNSIGNED.msix` to Partner Center.
+Test the adjustments on your own Windows images before submitting.
+
+## Live slider previews and clearer adjustment controls (1.4.2)
+
+Fixes redraw starvation while dragging: slider changes previously restarted a
+45 ms debounce timer, so continuous motion could postpone all image updates
+until the pointer paused. A non-resetting 16 ms timer now submits live changes,
+with one active worker and one latest pending request. Dragging uses a draft
+preview capped at 768 pixels per side, with a Live draft indicator. Releasing
+restores the normal zoom-dependent preview resolution; exports keep their
+existing full-resolution processing. Older settled renders cannot replace a
+newer drag preview. Draft previews are approximate and can differ from the
+settled view. Driver, zoom, image size and ongoing processing still affect speed.
+
+The renderer retains at most two resized/normalized preview sizes for the current
+source so draft/settled changes do not repeatedly discard each other's cache.
+A faster histogram retains the existing bin and clipping semantics. OpenCL image
+buffers and smoothing weights are reused under the existing lock; source pixels
+are uploaded on every call to prevent stale images. CPU fallback is unchanged.
+No stack data, exported FITS values or background neutralization behavior changes.
+
+The basic controls are Stretch, Black point, Exposure (display brightness),
+Contrast and Color saturation. Existing gradient, RGB balance, Gaussian smoothing
+and shadow/sky controls are under **Advanced: sky, color and noise** with an active
+indicator. All 11 controls and their project keys/ranges remain available. Units
+now show actual percentile, stops and smoothing pixels rather than ×100 labels.
+Old projects with non-default advanced values automatically open that section.
+Tooltips explain faint-signal clipping and that manual color gains are not
+photometric calibration. Smoothing remains a simple blur, not a star-preserving
+denoiser. Version 1.5.0 adds midtones, curves and protected noise reduction as described above.
+
+All 97 local tests passed, covering continuous-drag redraws before mouse release,
+latest-setting delivery, histogram edge equivalence, bounded cache reuse, GPU
+buffer reuse with new pixels and changed shapes, shared GPU concurrency, old
+projects and readable units. The application smoke test passed. Windows package
+validation passed for 1.4.2.0: Windows tests, packaged smoke checks, exact Store
+identity installation/activation, Program Files installation, desktop shortcut
+and upgrade checks succeeded. A Linux CPU fit-view check using an 8.3-megapixel
+Seestar exposure displayed 32 frames during an approximately 0.7-second continuous
+drag, compared with no intermediate frames before the fix. This is not a Windows
+GPU benchmark or a promise of a particular frame rate at every zoom level.
+
+[Download the 1.4.2 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42669422104/artifacts/13697928816).
+Extract and run `installer/EasyAstroStudio-1.4.2-Setup.exe`.
+
+[Download the 1.4.2 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42669422104/artifacts/13698088245).
+Extract and upload `EasyAstroStudio-1.4.2-x64-Store-UNSIGNED.msix` to Partner
+Center. Test the live preview on your Windows GPU before submitting.
+
+## Gaia diagnostics, crop reset and Auto sky (1.4.1)
+
+Gaia errors now identify HTTP status, DNS, TLS/certificate, timeout or connection
+failure without echoing raw exceptions, response bodies, credentials or sky
+center coordinates. Errors include the query radius, magnitude limit and attempt
+count. HTTP 403 and certificate failures are immediate actionable diagnostics;
+no certificate verification is disabled. Transient timeouts, connection failures,
+rate limits and HTTP 5xx errors receive up to three attempts with cancellable
+backoff. Each request allows 60 seconds. Retry-After delays are respected; long
+server-requested waits are reported instead of retrying early. The existing
+bundled-catalog/sky-solution fallback is preserved. The precise cause of the
+user's 1–2 second failure is not known until the improved diagnostic is observed.
+
+**Reset crop** now appears beside the preview zoom controls and in the Crop
+section. It removes all applied cropping, restores the original header/image,
+clears selection and aspect-ratio restrictions (Free), and fits the full image.
+Sliders and labels are preserved. Undo restores the previous crop in one step.
+
+**Auto sky** beside the preview and **Auto sky background** in Adjust suggest a
+darker display for linear FITS images. A bounded preview-scale estimate reduces
+Stretch and, when needed, Brightness, clearing the Sky offset. It preserves the
+black percentile, other adjustments, crop, annotations and source pixels. The
+suggestion targets a low-middle luminance near 0.12; it is not a semantic sky
+mask, photometric calibration or an exact recreation of the camera's JPG.
+Extended nebulosity can affect the estimate and faint structures can look
+darker. Undo restores the prior settings. Linear FITS exports remain unmodified
+by display adjustments. JPG/PNG images with an already dark sky are unchanged.
+
+The public Gaia CI probe now covers both a small cone and a Seestar-sized
+1.7-degree radius. All 92 local tests passed, including error classification,
+retry/cancellation and Retry-After handling, full crop reset/undo and Auto sky
+source-data preservation. The application smoke test passed. Windows package
+validation passed for 1.4.1.0, including Windows tests, packaged smoke checks,
+exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade verification. Both live public Gaia cone queries
+passed, including the 1.7-degree-radius case. This does not establish the cause
+of the user's immediate Gaia failure; the new diagnostic is needed for that.
+
+[Download the 1.4.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42657116616/artifacts/13693806104).
+Extract and run `installer/EasyAstroStudio-1.4.1-Setup.exe`.
+
+[Download the 1.4.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42657116616/artifacts/13693595822).
+Extract and upload `EasyAstroStudio-1.4.1-x64-Store-UNSIGNED.msix` to Partner
+Center. Test the installer and review any new Gaia diagnostic before submitting.
+
+## Gaia matching, embedded privacy and identification layout (1.4.0)
+
+Optional **Match detected stars with Gaia DR3 (online)** queries ESA's Gaia
+Archive TAP service for the current applied crop's sky center, radius and
+magnitude limit. This is separate from plate solving; a FITS/project sky solution
+or a successful Astrometry.net solve is required first. The separate Gaia consent
+checkbox must be selected for each query. No Gaia account/key is needed. The
+query sends no image pixels, detected-star positions, filenames, dates, FITS
+headers or Astrometry.net API key to ESA. It does reveal the sky region.
+
+A bounded HTTPS ADQL query selects up to 5,000 bright sources from
+`gaiadr3.gaia_source`. Gaia identifiers are retained as exact strings, avoiding
+64-bit ID rounding. Proper motions are propagated from the catalog reference
+epoch when a valid DATE-OBS is available; otherwise catalog-epoch positions are
+used. Local SEP detections are compared to sky positions using a configurable
+0.5–15 arcsecond tolerance (default 5). Each Gaia source can match at most one
+detection; unmatched sources are not labeled. Candidate rows show separation in
+arcseconds. Named bundled stars take precedence over overlapping Gaia candidates.
+The result cap reserves up to half the rows for Gaia candidates when available.
+These are proximity-based candidates, not guaranteed identities, a new plate
+solution, astrometric verification or calibrated photometry. Crowded fields,
+blends, saturated stars, inaccurate WCS and the 2,000-detection/5,000-source caps
+can omit or confuse matches. Gaia queries support crop radii up to 5 degrees.
+A smaller crop, brighter magnitude limit or adjusted tolerance may help.
+
+Selected Gaia IDs/labels survive project saves. The complete query result is
+held in memory only. A Gaia service failure preserves bundled-catalog results
+and any completed sky solution, with a prominent warning. Gaia data credit:
+ESA mission Gaia and the Gaia Data Processing and Analysis Consortium (DPAC),
+funded by national institutions participating in the Gaia Multilateral Agreement.
+See https://gea.esac.esa.int/archive/documentation/GDR3/ for source parameters.
+
+The Privacy Policy now opens inside the program from Settings, About, feedback
+and identification, using `assets/privacy_policy.md`. Reading it needs no network
+or browser. External provider links require an explicit click. The public policy
+URL remains available for Store metadata; the bundled and public text match.
+The updated policy describes the optional ESA query. The key button reads
+**Get Free API Key…**. Identification errors use a bold red banner; warnings
+use amber. The status banner and action buttons stay visible. The top controls
+use their full natural height with no nested scroll area, in a larger window.
+Smaller displays can scroll the whole content while retaining status/buttons.
+
+All 86 local tests passed, including proper-motion matching, exact source IDs,
+one-to-one matches, consent gating, Gaia failure fallback, project reopening and
+in-app privacy entry points. The Windows workflow also passed a live public
+Gaia DR3 query using an arbitrary M31 region (no user image, key or private
+metadata). Direct workspace query access was unavailable; the real protocol was
+verified by the Windows runner. Windows tests, packaged Gaia/privacy smoke
+checks, exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade checks passed for version 1.4.0.0.
+
+[Download the 1.4.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42631456034/artifacts/13681786884).
+Extract and run `installer/EasyAstroStudio-1.4.0-Setup.exe`.
+
+[Download the 1.4.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42631456034/artifacts/13681107276).
+Extract and upload `EasyAstroStudio-1.4.0-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. The privacy-policy URL remains
+the same; its updated contents are also bundled in the app.
+
+## Astrometry.net queued-submission fix (1.3.2)
+
+Fixes a premature "finished without a solution" error. The service may encode
+an unset processing-finished timestamp as the string `"None"`; additionally,
+submission preprocessing and astrometric jobs have separate lifecycles. Neither
+a truthy string nor a preprocessing-completion timestamp proves a solve failed.
+Empty job lists and pending `null` job placeholders now keep polling, with a
+clear queued status. The submission job list is refreshed every poll so newly
+assigned jobs are discovered. A failed job alongside a pending placeholder is
+not treated as failure of the whole request. Actual processing errors and
+explicit solver-job failures remain separate errors, with submission/job IDs.
+Remote error text is not echoed, protecting credentials from accidental display.
+
+Polling remains cancellable, with five-second intervals and a ten-minute wait
+limit. No extra data is uploaded by this fix and the privacy policy is unchanged.
+The 1.3.1 loaded-image preview and offline-default fixes are included.
+Authenticated live-service status has not been verified during development;
+the reported submission could not be retrieved through the available web tool.
+All 78 local tests passed, including queued empty/null job lists with both
+unset and completed preprocessing timestamps, later job assignment, pending
+placeholders alongside a failed job, and explicit processing/solver failures.
+Windows tests, packaged application smoke checks, MSIX validation and exact
+Microsoft Store identity installation/activation passed for 1.3.2.0.
+
+[Download the 1.3.2 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42495966507/artifacts/13624095378).
+Extract and upload `EasyAstroStudio-1.3.2-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. First test the corrected
+online polling in the Windows installer with your own API key. The live status
+of the user's submission was not accessible during development.
+
+## Identification image context and offline default (1.3.1)
+
+The Identify objects dialog now shows the currently loaded filename/target,
+a thumbnail of the main window's adjusted crop, original image dimensions and
+the applied crop dimensions. It uses the already open full-resolution source
+for solving and the current crop for catalog-result filtering; no second file
+selection is needed. The thumbnail is local display context, not upload data.
+
+The initial method is always Offline. When a usable FITS/project celestial WCS
+is missing, the dialog keeps Offline selected, disables the Identify action,
+explains that the image is loaded but pixel-to-sky coordinates are missing, and
+shows the validation reason. An explicit Set up online solving button changes
+the method without submitting anything. Online solving still requires an API
+key, per-solve consent and an explicit click. A FITS filename, object name or
+RA/Dec target center alone is not a full astrometric solution. This update does
+not add a standalone offline plate solver or infer an unverified orientation.
+
+All 67 local tests passed, including a regression test for the exact open
+source image, filename, adjusted preview and applied crop being passed into
+identification. The application smoke test and Windows tests, packaged smoke
+checks, exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade checks passed for version 1.3.1.0.
+
+[Download the 1.3.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42491733499/artifacts/13621677464).
+Extract it and run `installer/EasyAstroStudio-1.3.1-Setup.exe`.
+
+[Download the 1.3.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42491733499/artifacts/13621773113).
+Extract and upload `EasyAstroStudio-1.3.1-x64-Store-UNSIGNED.msix` to Partner
+Center. Microsoft signs accepted Store packages. Offline identification still
+requires valid sky coordinates; this update clarifies that requirement and does
+not add a standalone offline plate solver.
+
+## Automatic catalog labels (1.3.0)
+
+Open **Labels & Objects… → Identify objects…**. With a complete RA/Dec FITS WCS
+or saved-project solution, the offline method projects bundled catalog positions
+onto the full original image, then filters to the current applied crop. Position
+matching supports rotation, mirroring and SIP distortion. Header placeholders,
+missing pixel scales and external distortion-table dependencies are rejected.
+Existing headers are assumed to describe the actual image; the app cannot
+prove their accuracy without a new solve. Check labels against visible stars.
+
+Without valid sky coordinates, choose the online Astrometry.net method, obtain
+your own API key at https://nova.astrometry.net/api_help, enter it in the masked
+field, check the explicit consent box and click Identify. Local SEP extraction
+finds up to 2,000 stars in a bounded sample and maps their positions back to the
+original full-resolution pixel system. HTTPS sends the positions/rank, image
+size and solver options, not image pixels, paths, filenames or FITS headers.
+Login sends your key only to the service; it is never written to settings,
+projects or logs. The app requests private visibility and restrictive reuse.
+Astrometry.net may retain requests; cancellation cannot recall uploaded data.
+The GUI stays responsive, polls at five-second intervals, limits each network
+request to 20 seconds and waits at most ten minutes for a solution.
+
+Review the results before **Add selected labels**. Filter Galaxies, Nebulae,
+Clusters and Stars; set the faintest catalog magnitude, unknown-magnitude policy
+and maximum results (1–300). Check individual rows or Select all/none. Selected
+matches become editable circle/text labels with the current color and size,
+with duplicate prevention by catalog ID and a 500-label project limit. Existing
+manual labels are preserved. Undo removes a batch; projects save both labels
+and the sky solution so future filtering can work offline. A solved identification
+WCS is cached in the project; original FITS headers and source pixels are not
+rewritten by identification. Crop/export follows the existing annotation path.
+
+Bundled data: reduced OpenNGC deep-sky and HYG v4.1 bright-star catalogs, 15,162
+entries total (3,065 stars). Attribution, data source details and CC BY-SA 4.0
+license are in `assets/catalogs`. The catalogs cover selected named/bright stars
+and NGC/IC objects, not every object. Magnitudes can be approximate or absent;
+HYG proper motions are applied when DATE-OBS is valid. These are catalog
+positions, not pixel-level detection or proof that a faint object is visible.
+
+The online protocol is tested with simulated login, queued/solving jobs,
+private source-list submission, WCS download, cancellation and error responses.
+No live authenticated solve or private user-data upload was performed during
+development. All 66 local tests passed, including sky projection through
+rotation/mirroring/SIP, real-catalog matching, source extraction, HTTPS request
+encoding, redacted errors, opt-in, cancellation, duplicate handling and project
+reopening. Windows tests, packaged offline-identification smoke checks,
+MakePRI/MakeAppx validation, archive identity verification and installation/
+activation with the exact Microsoft Store identity passed for 1.3.0.0.
+
+[Download the 1.3.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42448053530/artifacts/13604925977).
+Extract it and upload `EasyAstroStudio-1.3.0-x64-Store-UNSIGNED.msix` to the
+next Partner Center submission. Microsoft signs accepted packages. This
+unsigned package is for Store upload, not direct installation. Test online
+solving with your own Astrometry.net API key before submitting; authenticated
+live-service availability was not verified during development.
+
+## Labels, image opening and stack completion (1.2.0)
+
+The far-right **Labels & Objects…** toolbar button opens a manual annotation
+panel when an image is loaded. Choose Text, Arrow or Circle, enter a caption,
+color and text size, then choose Place on image and click the target. Select an
+entry to edit its appearance or remove it. Escape cancels placement. Show labels
+controls visibility. Labels follow original pixel coordinates through crop and
+restore, support undo/redo, and are saved in .astro projects. Old projects open
+with no labels. At most 500 annotations are supported. Automatic identification
+and plate solving are planned, not included in this release.
+
+**Open image or FITS stack…** accepts FIT/FITS, JPG/JPEG and PNG. Raster inputs
+honor EXIF orientation and open with neutral stretch/black settings. Their
+imported display-encoded RGB data is not linear sensor data. Default raster
+rendering preserves RGB values, including zero-valued channels. Bayer patterns
+apply only to 2D FITS. PNG/JPEG import and labeled export use 8-bit RGB; these
+are not archival high-bit-depth or color-managed workflows.
+
+Section 5 adds **Save stacked FITS…** for the full original aligned stack,
+including exposure metadata, without display adjustments, labels or cropping.
+It is enabled for FITS stacks with multiple exposures. Existing general FITS
+export still saves the current crop without display adjustments or labels.
+**Export labeled image…** saves a separate PNG/JPG with visible annotations
+at the current crop's full resolution. Original files and linear arrays are
+unchanged; normal exports remain free of annotations.
+
+Successful alignment/stacking reports combined and skipped exposure counts,
+requests taskbar attention and plays the Windows system notification sound.
+Settings offers **Play sound when stacking finishes**, saved per user. Opening
+a single image, failed operations and cancellation do not play the chime.
+System volume and sound-scheme settings control whether a sound is audible.
+This release needs no online solver, account or extra Store capabilities.
+
+All 56 local tests passed. Windows tests, packaged GUI smoke checks (including
+JPG opening and labeled PNG export), MakePRI/MakeAppx validation and exact
+Microsoft Store identity installation/activation passed for version 1.2.0.0.
+
+[Download the 1.2.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42445610275/artifacts/13603766860).
+Extract it and upload `EasyAstroStudio-1.2.0-x64-Store-UNSIGNED.msix` to the
+Packages page of the next Partner Center submission. Microsoft signs accepted
+Store packages. The unsigned package is for Store upload, not direct installation.
+
+## Session tools, sky background and responsive previews (1.1.0)
+
+New project appears before Open project in the toolbar and File menu (Ctrl+N).
+It offers Save/Discard/Cancel for unsaved edits and clears the image, exposure
+list, history, crop and adjustment state. Original files, theme, Bayer choice,
+last FITS folder and GPU preference are preserved. New project is unavailable
+while stacking or project I/O is active.
+
+Add exposures and Open existing FITS stack start in the last selected FITS
+folder. Cancelled file dialogs do not overwrite it. An unavailable folder falls
+back to an existing parent or Documents. GPU selection is remembered per user;
+a driver/device failure uses CPU without forgetting the saved preference for a
+future start. The global preference takes priority over older projects' GPU view
+flag. An older project's enabled GPU choice can seed the preference if none has
+yet been saved. Windows settings are stored locally and do not upload data.
+
+Sky background % darkens or lightens shadows while applying less change to
+brighter tones. It is a display adjustment, not a semantic sky/object separation;
+faint nebulosity can change too. Zero is neutral. TIFF/PNG/JPEG reflect it; linear
+FITS export does not bake it in. Old .astro files gain a neutral Sky setting on
+load, including their undo history. New files retain the existing project format.
+
+Slider previews run in a background worker with one active render and one latest
+request. Dragging uses a reduced preview (up to 1280 pixels per side), then the
+current zoom's resolution is restored on release. Resized inputs and percentile
+normalization are reused until their inputs change. Crop/reset/initial-load
+operations retain immediate preview behavior. GPU render calls are serialized
+with export to avoid overlapping use of the same OpenCL kernels. The exposure
+list signature is cached; combining progress/log updates are throttled and the
+visible log keeps at most 2,000 lines. Preview work from a previous project is
+ignored after New project. These changes improve UI responsiveness, not the
+underlying speed of CPU alignment, storage or every processing phase.
+
+All 51 local tests passed, including pending-preview safety, latest-request
+coalescing/UI heartbeats, project save protection, old-project migration,
+preferences, cache reuse and CPU/software-OpenCL sky-adjustment comparisons.
+A Linux CPU check using a full-resolution 2160×3840 Seestar stack and 546
+exposure-list entries measured a maximum slider-handler duration of 0.76 ms,
+with the UI heartbeat continuing through the render and the latest settings
+shown correctly. This is a UI responsiveness check, not a Windows/RTX 5070
+stacking-speed guarantee. A shared OpenCL processor also passed concurrent
+background-preview/export numeric comparisons on software OpenCL.
+Windows tests, packaged application smoke checks, MakePRI/MakeAppx validation,
+archive identity checks and installation/activation with the exact Microsoft
+Store identity passed for version 1.1.0.0.
+
+[Download the 1.1.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42398766275/artifacts/13584538658).
+Extract it and upload `EasyAstroStudio-1.1.0-x64-Store-UNSIGNED.msix` to the
+Packages page of the next Partner Center submission. Microsoft signs accepted
+Store packages. This source package is intended for Store upload.
 
 ## Privacy policy (1.0.1)
 

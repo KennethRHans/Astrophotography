@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter
 import tifffile
 from PIL import Image
 from stack_store import AlignedFrames, combine
+from astro_adjustments import NEUTRAL_CURVE,tone_adjust,star_preserving_denoise
 
 
 def read_fits(path, bayer='Auto'):
@@ -41,6 +42,21 @@ def read_fits(path, bayer='Auto'):
             data = np.repeat(data[..., None], 3, axis=-1)
     return data, header
 
+
+
+def read_image(path,bayer='Auto'):
+    if Path(path).suffix.lower() in ('.fit','.fits'):return read_fits(path,bayer)
+    from PIL import ImageOps
+    with Image.open(path) as source:
+        if source.format not in ('JPEG','PNG'):raise ValueError('Choose a FITS, JPG or PNG image.')
+        oriented=ImageOps.exif_transpose(source)
+        if 'A' in oriented.getbands() or 'transparency' in oriented.info:
+            rgba=oriented.convert('RGBA');base=Image.new('RGBA',rgba.size,(0,0,0,255));rgb=Image.alpha_composite(base,rgba).convert('RGB')
+        else:rgb=oriented.convert('RGB')
+        data=np.asarray(rgb,dtype=np.float32)/255
+    header=fits.Header({'OBJECT':Path(path).stem,'EASRASTR':True})
+    header.add_history('Imported display-encoded JPG/PNG; not linear sensor data.')
+    return data,header
 
 
 def frame_count(header):
@@ -161,30 +177,48 @@ def correct_background(linear, strength=0, model=None):
     return image
 
 
+def adjust_sky(image,amount=0):
+    """Display shadow adjustment; bright stars receive progressively less change."""
+    if amount==0:return image
+    light=image @ np.array([.2126,.7152,.0722],dtype=np.float32)
+    weight=np.clip((.6-light)/.6,0,1)**2
+    return np.clip(image+np.float32(amount*.25)*weight[...,None],0,1)
+
+
+def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+    if isinstance(model,dict) and model.get('display_encoded'):
+        image=correct_background(linear,gradient,model['background'])
+        floor=np.percentile(image,black,axis=(0,1)) if black else 0
+        return np.clip((image-floor)*np.asarray(gains,dtype=np.float32),0,1),np.ones(linear.shape[:2],dtype=bool)
+    image=correct_background(linear,gradient,model)
+    valid=(linear>0).all(axis=-1)
+    sample=image[valid]
+    if not sample.size:return np.zeros_like(image),valid
+    floor=np.percentile(sample,black,axis=0)
+    image=np.maximum(image-floor,0)
+    image*=np.asarray(gains,dtype=np.float32)
+    white=max(float(np.percentile(image[valid],99.9)),1e-12)
+    return np.clip(image/white,0,1),valid
+
+
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, model=None, gpu=None):
-    image = correct_background(linear, gradient, model)
-    valid = (linear > 0).all(axis=-1)
-    sample = image[valid]
-    if not sample.size:
-        return np.zeros_like(image)
-    floor = np.percentile(sample, black, axis=0)
-    image = np.maximum(image-floor, 0)
-    image *= np.asarray(gains, dtype=np.float32)
-    white = max(float(np.percentile(image[valid], 99.9)), 1e-12)
-    image = np.clip(image/white, 0, 1)
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, midtones=0, star_denoise=0, star_protection=1, curve=NEUTRAL_CURVE, legacy_sky=0, model=None, gpu=None,normalization=None,prepared=None):
+    image,valid=normalization if normalization is not None else normalize_image(linear,black,gradient,gains,model)
+    if not np.any(valid):return np.zeros_like(image)
+    image=prepared if prepared is not None else star_preserving_denoise(image,star_denoise,star_protection,valid)
     if gpu is not None and not gpu.disabled:
         try:
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
             if not np.isfinite(result).all():
                 raise RuntimeError('GPU returned nonfinite pixels')
-            result = adjust_sky(result, sky)
-            result[~valid] = 0
-            return result
         except Exception as exc:
             gpu.disabled = True
             gpu.last_error = str(exc)
             # Re-run from the same normalized image on CPU after a GPU failure.
+        else:
+            result=tone_adjust(adjust_legacy_sky(adjust_sky(result,sky),legacy_sky),midtones,curve)
+            result[~valid] = 0
+            return result
     image = np.arcsinh(image*stretch)/np.arcsinh(stretch) if stretch > 0 else image
     if denoise:
         image = gaussian_filter(image, sigma=(denoise, denoise, 0))
@@ -192,12 +226,12 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image = np.clip(luminance[..., None]+saturation*(image-luminance[..., None]), 0, 1)
     if brightness != 0 or contrast != 1:
         image = np.clip((image*(2.**brightness)-.18)*contrast+.18,0,1)
-    image = adjust_sky(image, sky)
+    image=tone_adjust(adjust_legacy_sky(adjust_sky(image,sky),legacy_sky),midtones,curve)
     image[~valid] = 0
     return image
 
 
-def adjust_sky(image, stops=0):
+def adjust_legacy_sky(image, stops=0):
     if stops == 0:
         return image
     luminance = image @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
@@ -307,7 +341,7 @@ def save(path, linear, rendered, header):
         hdr = header.copy()
         for key in ('BAYERPAT', 'XBAYROFF', 'YBAYROFF'):
             hdr.remove(key, ignore_missing=True, remove_all=True)
-        hdr.add_history('Saved linear RGB; axis 3 is R,G,B. Display adjustments not applied.')
+        hdr.add_history(('Saved display-encoded RGB imported from JPG/PNG.' if header.get('EASRASTR') else 'Saved linear RGB; axis 3 is R,G,B.')+' Display adjustments not applied.')
         fits.writeto(path, np.moveaxis(linear, -1, 0), hdr, overwrite=True)
     elif suffix in ('.tif', '.tiff'):
         tifffile.imwrite(path, np.round(rendered*65535).astype(np.uint16), photometric='rgb')
@@ -317,3 +351,39 @@ def save(path, linear, rendered, header):
         Image.fromarray(np.round(rendered*255).astype(np.uint8)).save(path)
     else:
         raise ValueError('Choose .fits, .tif, .tiff, .png, .jpg or .jpeg.')
+
+
+def auto_sky_adjustments(linear,settings,model=None,size=None,target=.12):
+    """Suggest a reversible darker display; never alter source pixels/black point.
+
+    A lower-middle luminance estimate is not a semantic sky mask. Extended
+    nebulosity can affect it. Work at preview scale to keep the action bounded.
+    """
+    h,w=linear.shape[:2]
+    size=size or (w,h);factor=max(1,max(size)/768)
+    size=(max(1,round(size[0]/factor)),max(1,round(size[1]/factor)))
+    sample=linear if size==(w,h) else cv2.resize(linear,size,interpolation=cv2.INTER_AREA)
+    values=list(settings);normalization=normalize_image(sample,values[1],values[4],values[5],model)
+    valid=normalization[1]
+    if valid.sum()<16:return tuple(values)
+    def level(v):
+        image=render(sample,*v,model=model,normalization=normalization)
+        return float(np.percentile((image@np.array([.2126,.7152,.0722],dtype=np.float32))[valid],35))
+    if level(values)<=target:return tuple(values)
+    values[8]=0  # No shadow-offset clipping is introduced by the suggestion.
+    low=list(values);low[0]=0
+    if level(low)<=target:
+        lo,hi=0,int(values[0])
+        while lo<hi:
+            mid=(lo+hi+1)//2;candidate=list(values);candidate[0]=mid
+            if level(candidate)<=target:lo=mid
+            else:hi=mid-1
+        values[0]=lo
+    else:
+        values[0]=0;lo,hi=-2.,float(values[6])
+        for _ in range(9):
+            mid=(lo+hi)/2;candidate=list(values);candidate[6]=mid
+            if level(candidate)<=target:lo=mid
+            else:hi=mid
+        values[6]=round(lo,2)
+    return tuple(values)

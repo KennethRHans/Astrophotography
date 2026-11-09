@@ -16,6 +16,7 @@ def test_fits_folder_persists_across_windows_and_cancel(tmp_path, monkeypatch):
     qt = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     # Exercise the Qt path on any host without presenting native panels.
     monkeypatch.setattr(application.sys, 'platform', 'linux')
+    (tmp_path / 'Lights').mkdir()
     chosen = str(tmp_path / 'Lights' / 'light.fit')
     monkeypatch.setattr(QtWidgets.QFileDialog, 'getOpenFileNames', lambda *args: ([chosen], ''))
     first = Window(ask_on_close=False, settings=settings_at(tmp_path))
