@@ -38,7 +38,19 @@ All 97 local tests passed, covering continuous-drag redraws before mouse release
 latest-setting delivery, histogram edge equivalence, bounded cache reuse, GPU
 buffer reuse with new pixels and changed shapes, shared GPU concurrency, old
 projects and readable units. The application smoke test passed. Windows package
-validation is in progress for 1.4.2.0.
+validation passed for 1.4.2.0: Windows tests, packaged smoke checks, exact Store
+identity installation/activation, Program Files installation, desktop shortcut
+and upgrade checks succeeded. A Linux CPU fit-view check using an 8.3-megapixel
+Seestar exposure displayed 32 frames during an approximately 0.7-second continuous
+drag, compared with no intermediate frames before the fix. This is not a Windows
+GPU benchmark or a promise of a particular frame rate at every zoom level.
+
+[Download the 1.4.2 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42669422104/artifacts/13697928816).
+Extract and run `installer/EasyAstroStudio-1.4.2-Setup.exe`.
+
+[Download the 1.4.2 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42669422104/artifacts/13698088245).
+Extract and upload `EasyAstroStudio-1.4.2-x64-Store-UNSIGNED.msix` to Partner
+Center. Test the live preview on your Windows GPU before submitting.
 
 ## Gaia diagnostics, crop reset and Auto sky (1.4.1)
 
