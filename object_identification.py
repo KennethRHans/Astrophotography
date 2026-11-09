@@ -89,7 +89,7 @@ def identify_catalog(header,shape,crop=None,categories=CATEGORIES,magnitude=16,l
     return found[:max(1,min(int(limit),500))]
 
 
-def extract_sources(image,cancelled=lambda:False):
+def extract_sources(image,cancelled=lambda:False,minimum=10):
     """Return 1-based star coordinates in full original image pixels."""
     import sep
     h,w=image.shape[:2];scale=min(1.,2048/max(h,w))
@@ -102,7 +102,7 @@ def extract_sources(image,cancelled=lambda:False):
     sources=sep.extract(data,4.,err=noise,minarea=5,filter_kernel=None)
     keep=(sources['flux']>0)&(sources['b']>.45)&(sources['a']/np.maximum(sources['b'],1e-8)<3)&(sources['x']>3)&(sources['y']>3)&(sources['x']<data.shape[1]-4)&(sources['y']<data.shape[0]-4)
     sources=sources[keep];sources=sources[np.argsort(sources['flux'])[::-1]][:2000]
-    if len(sources)<10:raise ValueError('Fewer than 10 usable stars were found. Try the original FITS stack or a less cropped/processed image.')
+    if len(sources)<minimum:raise ValueError('Fewer than 10 usable stars were found. Try the original FITS stack or a less cropped/processed image.' if minimum==10 else 'No usable stars were found for Gaia matching. Try a less processed image or a wider crop.')
     return dict(x=((sources['x']+.5)*w/data.shape[1]+.5).tolist(),y=((sources['y']+.5)*h/data.shape[0]+.5).tolist(),image_width=w,image_height=h)
 
 
@@ -170,18 +170,32 @@ class NovaClient:
 
 
 class IdentificationWorker(QtCore.QThread):
+    warning=QtCore.Signal(str)
     progress=QtCore.Signal(str);done=QtCore.Signal(object,object);failed=QtCore.Signal(str)
     def __init__(self,image,header,crop,options,key=None,client=None):
         super().__init__();self.image=image;self.header=header.copy();self.crop=crop;self.options=options;self.key=key;self.client=client or NovaClient()
     def run(self):
         try:
-            header=self.header
+            header=self.header;sources=None
+            options=dict(self.options);use_gaia=options.pop('gaia',False);tolerance=options.pop('gaia_tolerance',5.)
             if self.key is not None:
                 self.progress.emit('Finding stars locally…');sources=extract_sources(self.image,self.isInterruptionRequested)
                 header,job=self.client.solve(sources,self.key,self.progress.emit,self.isInterruptionRequested)
-                header['DATE-OBS']=self.header.get('DATE-OBS','2000-01-01T12:00:00')
+                if self.header.get('DATE-OBS'):header['DATE-OBS']=self.header['DATE-OBS']
             self.progress.emit('Matching bundled catalog positions…')
-            rows=identify_catalog(header,self.image.shape,crop=self.crop,cancelled=self.isInterruptionRequested,**self.options)
+            rows=identify_catalog(header,self.image.shape,crop=self.crop,cancelled=self.isInterruptionRequested,**options)
+            if use_gaia:
+                from gaia_matching import gaia_matches
+                if 'Stars' not in options.get('categories',CATEGORIES):raise ValueError('Select the Stars category for Gaia matching.')
+                try:candidates=gaia_matches(self.image,header,self.crop,options.get('magnitude',16),options.get('limit',100),tolerance,self.progress.emit,self.isInterruptionRequested,sources=sources)
+                except InterruptedError:raise
+                except Exception as exc:
+                    self.warning.emit('Gaia matching did not complete: '+str(exc)+' Bundled catalog results and any completed sky solution are still available.');candidates=[]
+                # Prefer named bundled stars over a Gaia candidate at the same position.
+                pixels_per_arcsec=1/max(float(np.mean(proj_plane_pixel_scales(celestial_wcs(header,self.image.shape))))*3600,1e-9)
+                candidates=[r for r in candidates if not any(a['category']=='Stars' and np.hypot(a['x']-r['x'],a['y']-r['y'])<tolerance*pixels_per_arcsec for a in rows)]
+                maximum=options.get('limit',100);candidates=candidates[:max(1,maximum//2)]
+                rows=rows[:maximum-len(candidates)]+candidates
             if self.isInterruptionRequested():raise InterruptedError('Cancelled')
             self.done.emit(rows,header)
         except Exception as exc:self.failed.emit(str(exc))

@@ -1,8 +1,59 @@
-# Easy Astro Studio — 1.3.2 Store update
+# Easy Astro Studio — 1.4.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Gaia matching, embedded privacy and identification layout (1.4.0)
+
+Optional **Match detected stars with Gaia DR3 (online)** queries ESA's Gaia
+Archive TAP service for the current applied crop's sky center, radius and
+magnitude limit. This is separate from plate solving; a FITS/project sky solution
+or a successful Astrometry.net solve is required first. The separate Gaia consent
+checkbox must be selected for each query. No Gaia account/key is needed. The
+query sends no image pixels, detected-star positions, filenames, dates, FITS
+headers or Astrometry.net API key to ESA. It does reveal the sky region.
+
+A bounded HTTPS ADQL query selects up to 5,000 bright sources from
+`gaiadr3.gaia_source`. Gaia identifiers are retained as exact strings, avoiding
+64-bit ID rounding. Proper motions are propagated from the catalog reference
+epoch when a valid DATE-OBS is available; otherwise catalog-epoch positions are
+used. Local SEP detections are compared to sky positions using a configurable
+0.5–15 arcsecond tolerance (default 5). Each Gaia source can match at most one
+detection; unmatched sources are not labeled. Candidate rows show separation in
+arcseconds. Named bundled stars take precedence over overlapping Gaia candidates.
+The result cap reserves up to half the rows for Gaia candidates when available.
+These are proximity-based candidates, not guaranteed identities, a new plate
+solution, astrometric verification or calibrated photometry. Crowded fields,
+blends, saturated stars, inaccurate WCS and the 2,000-detection/5,000-source caps
+can omit or confuse matches. Gaia queries support crop radii up to 5 degrees.
+A smaller crop, brighter magnitude limit or adjusted tolerance may help.
+
+Selected Gaia IDs/labels survive project saves. The complete query result is
+held in memory only. A Gaia service failure preserves bundled-catalog results
+and any completed sky solution, with a prominent warning. Gaia data credit:
+ESA mission Gaia and the Gaia Data Processing and Analysis Consortium (DPAC),
+funded by national institutions participating in the Gaia Multilateral Agreement.
+See https://gea.esac.esa.int/archive/documentation/GDR3/ for source parameters.
+
+The Privacy Policy now opens inside the program from Settings, About, feedback
+and identification, using `assets/privacy_policy.md`. Reading it needs no network
+or browser. External provider links require an explicit click. The public policy
+URL remains available for Store metadata; the bundled and public text match.
+The updated policy describes the optional ESA query. The key button reads
+**Get Free API Key…**. Identification errors use a bold red banner; warnings
+use amber. The status banner and action buttons stay visible. The top controls
+use their full natural height with no nested scroll area, in a larger window.
+Smaller displays can scroll the whole content while retaining status/buttons.
+
+Public Gaia query access from this development workspace was unavailable. The
+Windows workflow includes a non-gating, bounded public Gaia query check using
+an arbitrary M31 region (no user image, key or private metadata). Core tests use
+representative CSV responses and synthetic astrometric matching. Windows
+package validation is in progress for version 1.4.0.0. All 86 local tests
+passed, including proper-motion matching, exact source IDs, one-to-one matches,
+consent gating, Gaia failure fallback, project reopening and in-app privacy
+entry points. The application smoke test passed.
 
 ## Astrometry.net queued-submission fix (1.3.2)
 

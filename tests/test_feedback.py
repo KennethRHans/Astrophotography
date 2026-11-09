@@ -58,13 +58,26 @@ def test_timeout_preserves_message_and_footer_links(monkeypatch):
     window.close()
 
 
-def test_privacy_link_available_before_feedback_submission(monkeypatch):
+def test_privacy_available_in_app_without_network_before_feedback(monkeypatch):
+    from privacy_viewer import PrivacyDialog
     app=W.QApplication.instance() or W.QApplication([])
-    network=Network();dialog=FeedbackDialog(network=network);opened=[]
+    network=Network();dialog=FeedbackDialog(network=network);opened=[];viewed=[]
     monkeypatch.setattr(QtGui.QDesktopServices,'openUrl',lambda url:opened.append(url.toString()) or True)
+    monkeypatch.setattr(PrivacyDialog,'exec',lambda self:viewed.append(self.policy_text) or W.QDialog.Rejected)
     dialog.privacy_button.click()
-    assert opened==[community_links.PRIVACY_URL] and not network.requests
+    assert len(viewed)==1 and 'Optional Gaia star matching' in viewed[0] and not network.requests and not opened
     dialog.close()
     window=Window(ask_on_close=False);window.privacy_action.trigger()
-    assert opened==[community_links.PRIVACY_URL,community_links.PRIVACY_URL]
-    window.close()
+    assert len(viewed)==2 and not opened
+    def about(self):
+        next(b for b in self.buttons() if b.text()=='Privacy Policy').click()
+        return W.QMessageBox.Ok
+    monkeypatch.setattr(W.QMessageBox,'exec',about)
+    window.about_action.trigger();assert len(viewed)==3 and not opened
+    from identify_dialog import IdentifyDialog
+    import numpy as np
+    from astropy.io import fits
+    identification=IdentifyDialog(np.ones((30,40,3),dtype='float32'),fits.Header(),(0,0,40,30))
+    next(b for b in identification.findChildren(W.QPushButton) if b.text()=='App privacy policy').click()
+    assert len(viewed)==4 and not opened
+    identification.reject();window.close()

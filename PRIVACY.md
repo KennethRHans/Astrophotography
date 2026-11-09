@@ -1,6 +1,6 @@
 # Easy Astro Studio Privacy Policy
 
-**Effective date: November 7, 2026**
+**Effective date: November 9, 2026**
 
 Easy Astro Studio is a Windows desktop application published by **Astrivanta**.
 This policy explains how information is handled when you use the application,
@@ -67,6 +67,32 @@ service processing it. The app downloads the resulting sky solution and matches
 it with bundled catalogs locally. Accepted labels and the sky solution can be
 saved in your project; no API key or service session is included. Requests about
 data held by Astrometry.net should be directed to that independent service.
+
+## Optional Gaia star matching
+
+Gaia matching is optional and requires a sky solution first. If you enable
+**Match detected stars with Gaia DR3 (online)**, agree to its separate consent
+checkbox and start identification, the app sends a catalog query over HTTPS to
+**ESA's Gaia Archive at gea.esac.esa.int**. The query contains the current crop's
+sky center, search radius and faintest magnitude limit. These values reveal
+which sky region is being examined. ESA also receives connection information
+such as your IP address and request time and may retain request records under
+its own service practices. Consult https://www.cosmos.esa.int/web/gaia-users for
+Gaia Archive information and https://www.esa.int/About_Us/Law_at_ESA/Privacy_notice
+for ESA privacy information.
+
+The Gaia query does not send image pixels, detected star coordinates, filenames,
+paths, FITS headers, observing dates, personal contact details or your
+Astrometry.net API key. No Gaia account or API key is used by this feature.
+The app downloads a limited set of catalog positions, magnitudes and proper
+motions and matches them against locally detected stars on your computer.
+Candidate labels can be saved in your project or exported in a labeled image.
+The full Gaia catalog is not downloaded or permanently cached by the app.
+
+You can leave Gaia disabled to use only the bundled catalogs. Cancel before
+starting to avoid the query; cancelling after submission cannot recall a query
+already received by ESA. Gaia matching is not a plate solver and does not
+independently verify the sky solution or guarantee an identification.
 
 ## Optional bug reports and suggestions
 
@@ -145,6 +171,14 @@ their own request processes or legal retention requirements.
 If a parent or guardian believes a child submitted personal information through
 the feedback form, they can contact us at the same address to request review and
 deletion.
+
+## Reading this policy in the app
+
+A copy of this policy is bundled with the app and opens in Settings, feedback
+and identification without an internet connection. Reading the bundled policy
+does not visit GitHub or transmit a network request. External provider links
+open in your browser only if you choose to click them. The public policy URL
+remains available for the Microsoft Store listing.
 
 ## Changes to this policy
 

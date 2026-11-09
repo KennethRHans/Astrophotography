@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets as W
 import engine
 from annotations import LabelsPanel,paint_annotations
 from identify_dialog import IdentifyDialog
+from privacy_viewer import show_privacy
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -284,7 +285,7 @@ class Window(W.QMainWindow):
         settings_menu=self.menuBar().addMenu('Settings');theme_menu=settings_menu.addMenu('Theme')
         self.chime_action=QtGui.QAction('Play sound when stacking finishes',self);self.chime_action.setCheckable(True);self.chime_action.setChecked(self.settings_store.value('notifications/stack_sound',True,type=bool));settings_menu.addAction(self.chime_action)
         self.chime_action.toggled.connect(self.save_chime_preference)
-        self.privacy_action=QtGui.QAction('Privacy Policy',self);self.privacy_action.triggered.connect(lambda:self.open_community_link(community_links.PRIVACY_URL));settings_menu.addAction(self.privacy_action)
+        self.privacy_action=QtGui.QAction('Privacy Policy',self);self.privacy_action.triggered.connect(lambda:show_privacy(self));settings_menu.addAction(self.privacy_action)
         self.theme_actions={};self.theme_group=QtGui.QActionGroup(self);self.theme_group.setExclusive(True)
         for name in THEMES:
             action=QtGui.QAction(name,self);action.setCheckable(True);action.setChecked(name==self.theme_name)
@@ -307,11 +308,16 @@ class Window(W.QMainWindow):
         if hasattr(self,'_clipping_warning'):self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
 
     def show_about(self):
-        W.QMessageBox.about(self,'About Easy Astro Studio',
+        box=W.QMessageBox(self);box.setWindowTitle('About Easy Astro Studio');box.setTextFormat(QtCore.Qt.RichText)
+        box.setText(
             '<h2>Easy Astro Studio</h2><p>Version '+VERSION+'</p><p>by Astrivanta ©</p>'
             '<p>Align and stack FITS exposures, adjust and crop images, identify and label catalog objects, and export FITS, TIFF, PNG or JPEG.</p>'
             '<p>Catalog data: OpenNGC (Mattia Verga and contributors) and HYG v4.1 (David Nash / Astronomy Nexus and contributors), CC BY-SA 4.0. Full attribution and license are bundled in assets/catalogs.</p>'
-            '<p><a href="'+community_links.PRIVACY_URL+'">Privacy Policy</a> · Privacy contact: starsandfits@gmail.com</p>')
+            '<p>Gaia matching uses ESA Gaia DR3 and DPAC data. Candidate matches require an existing sky solution.</p>'
+            '<p>Privacy contact: starsandfits@gmail.com</p>')
+        box.setStandardButtons(W.QMessageBox.Ok);privacy=box.addButton('Privacy Policy',W.QMessageBox.ActionRole);privacy.clicked.connect(lambda:show_privacy(box))
+        try:box.exec()
+        finally:box.deleteLater()
 
     def review_exposures(self):
         if self.worker is not None or self.project_worker is not None or not self.files.count():return
@@ -991,6 +997,9 @@ if __name__ == '__main__':
             from PIL import Image
             with Image.open(output) as exported:
                 assert exported.format=='JPEG'
+            from privacy_viewer import PrivacyDialog
+            privacy=PrivacyDialog(window);assert 'Optional Gaia star matching' in privacy.policy_text;privacy.reject()
+            from gaia_matching import match_candidates
             from object_identification import catalog
             from astropy.wcs import WCS
             target=next(r for r in catalog() if r['id']=='OpenNGC:NGC0224')
@@ -1000,6 +1009,10 @@ if __name__ == '__main__':
             while identification.worker is not None and time.monotonic()<deadline:app.processEvents();time.sleep(.01)
             assert identification.worker is None and identification.selected_rows(),'Packaged offline identification failed'
             window.add_identified_objects(identification.selected_rows(),identification.solution);identification.reject()
+            gaia_source=dict(id='Gaia DR3:1234567890123456789',name='Gaia DR3 1234567890123456789',category='Stars',ra=target['ra'],dec=target['dec'],epoch=2016.,pmra=0.,pmdec=0.,mag=12.,priority=2)
+            matched=match_candidates(sky,sky.to_header(),window.applied_crop,[gaia_source],dict(x=[40.],y=[30.]),5.,100)
+            assert matched and matched[0]['match_arcsec']<.01,'Packaged Gaia matching failed'
+
             raster,raster_header=engine.read_image(output);assert raster_header['EASRASTR'] and raster.shape==window.linear.shape
             window.labels_panel.text.setText('Test target');window.place_label(30,25)
             assert window.labeled_image().save(str(Path(folder)/'labeled.png'))

@@ -61,8 +61,8 @@ def test_review_preview_analysis_reference_and_main_image_preservation(tmp_path,
     window.review_exposures()
     assert window.files.item(0).text()==paths[1]
     assert window.files.count()==3 and window.linear is original and window.edit_state()==before
-    captured=[];monkeypatch.setattr(W.QMessageBox,'about',lambda *args:captured.append(args[-1]))
-    window.about_action.trigger();assert 'Version 1.3.2' in captured[0]
+    captured=[];monkeypatch.setattr(W.QMessageBox,'exec',lambda self:captured.append(self.text()) or W.QMessageBox.Ok)
+    window.about_action.trigger();assert 'Version 1.4.0' in captured[0]
     window.close()
 
 

@@ -31,3 +31,13 @@ Source CSV SHA-256 checksums (before reduction):
 
 * OpenNGC NGC.csv: `54abea0b57b0a103831bfc7a8e3a99a23acfbf4bb581fcf3d8af539cbb826c84`
 * HYG v4.1 CSV: `d9f69fd86bbf90a4e4d52b4c5c53eacfa6dfc0bfdef85bfd94f095e0bebe4ebd`
+
+## Optional Gaia matching
+
+Gaia is queried online only after separate consent; its full catalog is not
+bundled here. The runtime uses ESA Gaia DR3 source parameters from
+https://gea.esac.esa.int/archive/documentation/GDR3/ . Credit: ESA mission Gaia
+and the Gaia Data Processing and Analysis Consortium (DPAC). DPAC funding is
+provided by national institutions, particularly those participating in the
+Gaia Multilateral Agreement. Local candidate matching is not an independent
+plate solution, source classification or guarantee of identity.
