@@ -36,7 +36,18 @@ The public Gaia CI probe now covers both a small cone and a Seestar-sized
 1.7-degree radius. All 92 local tests passed, including error classification,
 retry/cancellation and Retry-After handling, full crop reset/undo and Auto sky
 source-data preservation. The application smoke test passed. Windows package
-validation is in progress for 1.4.1.0.
+validation passed for 1.4.1.0, including Windows tests, packaged smoke checks,
+exact Store identity installation/activation, Program Files installation,
+desktop shortcut and upgrade verification. Both live public Gaia cone queries
+passed, including the 1.7-degree-radius case. This does not establish the cause
+of the user's immediate Gaia failure; the new diagnostic is needed for that.
+
+[Download the 1.4.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42657116616/artifacts/13693806104).
+Extract and run `installer/EasyAstroStudio-1.4.1-Setup.exe`.
+
+[Download the 1.4.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42657116616/artifacts/13693595822).
+Extract and upload `EasyAstroStudio-1.4.1-x64-Store-UNSIGNED.msix` to Partner
+Center. Test the installer and review any new Gaia diagnostic before submitting.
 
 ## Gaia matching, embedded privacy and identification layout (1.4.0)
 
