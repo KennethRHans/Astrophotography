@@ -23,6 +23,21 @@ it, while linear FITS keeps integrated source data.
 See [the stacking audit](STACKING_AUDIT.md) for algorithms, small-stack limits,
 weighting assumptions, calibration caveats, metadata and verification.
 
+All 123 local tests and application smoke passed. Windows validation passed:
+110 tests passed, 13 OpenCL tests skipped on that runner; packaged smoke,
+Store-identity activation, Program Files/desktop shortcut and upgrade checks
+succeeded. Local software-OpenCL tests covered GPU parity and fallback.
+
+[Apple implementation handoff](APPLE_HANDOFF_1_6.md) — shared source files,
+algorithms, defaults, project/metadata changes and Metal porting guidance.
+
+[Download the 1.6.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42900292577/artifacts/13803920279).
+Extract and run `installer/EasyAstroStudio-1.6.0-Setup.exe`.
+
+[Download the 1.6.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42900292577/artifacts/13801239952).
+Extract and upload `EasyAstroStudio-1.6.0-x64-Store-UNSIGNED.msix` to Partner Center
+after testing your own exposures.
+
 ## Windows preview and background updates (1.5.1)
 
 Ports the shared processing changes described in the
