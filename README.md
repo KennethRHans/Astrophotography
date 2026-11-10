@@ -1,8 +1,27 @@
-# Easy Astro Studio — 1.5.1 Store update
+# Easy Astro Studio — 1.6.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Better stacking and selected-sky background extraction (1.6.0)
+
+Step 3 adds robust median/MAD rejection and bounded quality weights for sharper,
+cleaner exposures. The existing 3-sigma equal-weight method remains available
+for comparison. Optional exposure-time normalization is off by default; use
+calibrated frames and inspect mixed-duration results. Stacking logs describe
+fallbacks and FITS metadata records the selected method and accepted exposure
+range. CPU and GPU use the same robust rejection rule.
+
+Step 4 adds **Background extraction — choose sky samples…**. Select clear sky
+boxes around the target, choose a plane or quadratic gradient, and Apply. Auto
+points protect the center but still need review. Undo, Reset adjustments and
+projects retain/restore the model; cropping transforms it correctly. The fit
+removes spatial variation, not the constant sky level. Rendered exports include
+it, while linear FITS keeps integrated source data.
+
+See [the stacking audit](STACKING_AUDIT.md) for algorithms, small-stack limits,
+weighting assumptions, calibration caveats, metadata and verification.
 
 ## Windows preview and background updates (1.5.1)
 
@@ -35,18 +54,6 @@ TIFF/PNG/JPEG exports include display adjustments. **Save stacked FITS and FITS
 export retain linear source pixels**, including their original color cast;
 neutralization is not baked into linear FITS. Mixed-exposure weighting and
 metadata improvements remain separate work.
-
-Local validation: all 114 tests and the application smoke test passed, plus
-focused export/reset/compare regression checks. Synthetic-image live dragging
-still displayed intermediate updates and delivered the latest settings. Windows
-validation passed: packaged smoke, Store identity installation/activation,
-Program Files, desktop shortcut and upgrade checks all succeeded.
-
-[Download the 1.5.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42869030369/artifacts/13789262069).
-Extract and run `installer/EasyAstroStudio-1.5.1-Setup.exe`.
-
-[Download the 1.5.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42869030369/artifacts/13789865440).
-Extract and upload `EasyAstroStudio-1.5.1-x64-Store-UNSIGNED.msix` to Partner Center.
 
 ## Midtones, tone curves and protected noise reduction (1.5.0)
 

@@ -60,14 +60,42 @@ def clipped_mean(block):
         return np.ma.mean(clipped, axis=0).filled(np.nan).astype(np.float32)
 
 
+def robust_weighted_mean(block,weights):
+    """Unweighted median/MAD rejection, then weighted accepted-sample mean.
+
+    Four robust sigma; fewer than eight covered frames use a weighted mean.
+    A single pass avoids progressive erosion of star profiles. Weights never
+    affect the rejection mask. Constant/quantized data get a rounding floor.
+    """
+    shape=(-1,)+(1,)*(block.ndim-1)
+    weights=np.asarray(weights,dtype=np.float64).reshape(shape)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore',RuntimeWarning)
+        values=np.where(np.isfinite(block),block,np.nan).astype(np.float64)
+        center=np.nanmedian(values,axis=0)
+        mad=np.nanmedian(np.abs(values-center),axis=0)*1.482602218505602
+        threshold=np.maximum(4*mad,np.maximum(abs(center)*1e-6,1e-6))
+        valid=np.isfinite(values)&((np.sum(np.isfinite(values),axis=0)<8)|(np.abs(values-center)<=threshold))
+        total=np.sum(np.where(valid,values,0)*weights,axis=0)
+        denominator=np.sum(valid*weights,axis=0)
+        return np.divide(total,denominator,out=np.full_like(total,np.nan),where=denominator>0).astype(np.float32)
+
+
 def combine(store, gpu=None, progress=lambda s: None, cancelled=lambda: False,
             report_progress=lambda done,total,stage: None,
-            input_bytes=COMBINE_INPUT_BYTES):
+            input_bytes=COMBINE_INPUT_BYTES, weights=None, rejection='legacy'):
+    if rejection not in ('legacy','robust'):raise ValueError('Unknown rejection mode')
+    if weights is not None:
+        weights=np.asarray(weights,dtype=np.float32)
+        if weights.shape!=(store.count,) or not np.isfinite(weights).all() or np.any(weights<=0):raise ValueError('Invalid frame weights')
+    robust=rejection=='robust'
+    if weights is not None and not robust:raise ValueError('Quality weights require robust rejection mode')
+    if robust and weights is None:weights=np.ones(store.count,dtype=np.float32)
     h, w, _ = store.shape
     # Device allocation limits and a small host staging buffer both apply.
     budget = input_bytes
     if gpu is not None:
-        budget = min(budget, gpu.combine_input_limit())
+        budget = min(budget, gpu.combine_input_limit()//(2 if robust else 1))
     if budget < store.count*4:
         raise ValueError('Stack chunk budget is too small for one sample.')
     samples = max(1, budget//(store.count*4))
@@ -89,15 +117,15 @@ def combine(store, gpu=None, progress=lambda s: None, cancelled=lambda: False,
         block = store.read(first, last)
         if gpu is not None:
             try:
-                result = gpu.combine(block)
+                result = gpu.combine_weighted(block,weights) if robust else gpu.combine(block)
                 if result.shape != (last-first,) or not np.isfinite(result).all():
                     raise RuntimeError('GPU returned invalid combined pixels.')
             except Exception as exc:
                 progress(f'GPU combining failed; continuing on CPU with bounded chunks: {exc}')
                 gpu = None
-                result = clipped_mean(block)
+                result = robust_weighted_mean(block,weights) if robust else clipped_mean(block)
         else:
-            result = clipped_mean(block)
+            result = robust_weighted_mean(block,weights) if robust else clipped_mean(block)
         # Uncovered pixels are black, never extrapolated detail.
         np.nan_to_num(result, copy=False, nan=0, posinf=0, neginf=0)
         flat[first:last] = result

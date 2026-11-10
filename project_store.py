@@ -35,6 +35,8 @@ class EditHistory:
 
 def validate_state(state,shape,slider_ranges=None):
     if not isinstance(state,dict):raise ValueError('Invalid editing state')
+    from background_extraction import validate_extraction
+    validate_extraction(state.get('background_fit'))
     h,w,_=shape
     crop=state.get('applied_crop')
     if not isinstance(crop,list) or len(crop)!=4 or any(type(x) is not int for x in crop):raise ValueError('Invalid applied crop')

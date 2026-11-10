@@ -131,6 +131,28 @@ class GpuProcessor:
             a.release(); b.release()
         return result
 
+    def combine_weighted(self,block,weights):
+        """Robust median/MAD rejection with original-index frame weights."""
+        cl=self.cl
+        if 'cl_khr_fp64' not in self.context.devices[0].extensions.split():
+            raise RuntimeError('Robust GPU combining requires double precision')
+        if not hasattr(self,'weighted_kernel'):
+            program=cl.Program(self.context,'#pragma OPENCL EXTENSION cl_khr_fp64 : enable\ntypedef double acc_t;\n'+COMBINE_SOURCE+WEIGHTED_SOURCE).build()
+            self.weighted_kernel=cl.Kernel(program,'weighted_frames')
+        source=np.ascontiguousarray(block,dtype=np.float32);weights=np.ascontiguousarray(weights,dtype=np.float64)
+        frames,pixels=source.shape
+        if source.nbytes*2>self.combine_input_limit():raise MemoryError('Robust GPU chunk exceeds allocation budget')
+        buffers=[]
+        try:
+            for value in (source,source,weights):buffers.append(cl.Buffer(self.context,cl.mem_flags.READ_WRITE|cl.mem_flags.COPY_HOST_PTR,hostbuf=value))
+            result=np.empty(pixels,dtype=np.float32);out=cl.Buffer(self.context,cl.mem_flags.WRITE_ONLY,result.nbytes);buffers.append(out)
+            self.weighted_kernel(self.queue,(pixels,),None,*buffers,np.int32(frames),np.int32(pixels))
+            cl.enqueue_copy(self.queue,result,out).wait()
+            return result
+        finally:
+            self.queue.finish()
+            for buffer in buffers:buffer.release()
+
 
 COMBINE_SOURCE = r'''
 // In-place quickselect in the frame dimension. Each pixel owns independent
@@ -190,5 +212,26 @@ __kernel void combine_frames(__global float *v, __global float *out,
     acc_t total=0;
     for (int f=0; f<n; ++f) total+=(acc_t)v[f*pixels+p];
     out[p]=n ? (float)(total/n) : 0.0f;
+}
+'''
+
+
+WEIGHTED_SOURCE = r'''
+__kernel void weighted_frames(__global const float *src,__global float *scratch,
+                              __global const double *weights,__global float *out,
+                              const int frames,const int pixels) {
+    int p=get_global_id(0),n=0;
+    for(int f=0;f<frames;++f)if(isfinite(src[f*pixels+p]))scratch[(n++)*pixels+p]=src[f*pixels+p];
+    if(!n){out[p]=0;return;}
+    double median=(double)select_k(scratch,pixels,p,n,n/2);
+    if(n%2==0)median=.5*median+.5*(double)select_k(scratch,pixels,p,n,n/2-1);
+    int k=0;
+    for(int f=0;f<frames;++f)if(isfinite(src[f*pixels+p]))scratch[(k++)*pixels+p]=(float)fabs((double)src[f*pixels+p]-median);
+    double mad=(double)select_k(scratch,pixels,p,n,n/2);
+    if(n%2==0)mad=.5*mad+.5*(double)select_k(scratch,pixels,p,n,n/2-1);
+    double threshold=fmax(4*1.482602218505602*mad,fmax(fabs(median)*1e-6,1e-6));
+    double sum=0,denom=0;
+    for(int f=0;f<frames;++f){double v=src[f*pixels+p];if(isfinite(v)&&(n<8||fabs(v-median)<=threshold)){sum+=v*weights[f];denom+=weights[f];}}
+    out[p]=denom>0 ? (float)(sum/denom):0;
 }
 '''

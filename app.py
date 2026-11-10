@@ -19,6 +19,8 @@ from feedback import FeedbackDialog
 from app_version import VERSION
 from themes import THEMES,apply_theme
 from frame_review import FrameReviewDialog
+from background_dialog import BackgroundDialog
+from background_extraction import fit_sky,cropped_coefficients
 from preview_render import PreviewRenderer,PreviewWorker
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
@@ -31,10 +33,11 @@ class Worker(QtCore.QThread):
     result = QtCore.Signal(object, object)
     progress = QtCore.Signal(int, int, str)
     failed = QtCore.Signal(str)
-    def __init__(self, paths, bayer, single=False, use_gpu=False):
+    def __init__(self, paths, bayer, single=False, use_gpu=False, stack_options=None):
         super().__init__()
         self.paths, self.bayer, self.single = paths, bayer, single
         self.use_gpu = use_gpu
+        self.stack_options=stack_options or {}
     def run(self):
         try:
             times={'message':0.,'progress':0.,'stage':None}
@@ -54,7 +57,7 @@ class Worker(QtCore.QThread):
                     self.message.emit('GPU row combining enabled: '+gpu.name)
                 except Exception as exc:
                     self.message.emit('GPU combining unavailable; using bounded CPU chunks: '+str(exc))
-            result = engine.read_image(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, message, self.isInterruptionRequested, progress, gpu=gpu)
+            result = engine.read_image(self.paths[0], self.bayer) if self.single else engine.stack(self.paths, self.bayer, message, self.isInterruptionRequested, progress, gpu=gpu, **self.stack_options)
             self.result.emit(*result)
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -80,6 +83,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.solution_header=None
+        self.background_fit=None
         self.annotations=[];self.labels_visible=True
         self.source_paths=[]
         self.preview_renderer=PreviewRenderer();self.preview_worker=None;self._preview_generation=0;self._preview_pending=False;self._close_after_preview=False;self._files_json=None
@@ -157,6 +161,18 @@ class Window(W.QMainWindow):
         section_title=W.QLabel('3. Align and Stack Exposures');section_title.setObjectName('sectionTitle');section_title.setWordWrap(True);sidebar.addWidget(section_title)
         stack_hint=W.QLabel('For individual exposures only. Existing stacks skip this step and open in step 4.');stack_hint.setWordWrap(True);sidebar.addWidget(stack_hint)
         self.reference_label=W.QLabel('Reference: first exposure in the list');self.reference_label.setWordWrap(True);sidebar.addWidget(self.reference_label)
+        self.rejection=W.QComboBox();self.rejection.addItems(['Robust rejection + optional quality weights','Legacy 3-sigma / equal weights'])
+        self.rejection.setCurrentIndex(int(self.settings_store.value('stack/rejection',0)))
+        sidebar.addWidget(self.rejection)
+        self.quality_stack=W.QCheckBox('Weight sharper, cleaner exposures more');self.quality_stack.setChecked(self.settings_store.value('stack/quality',True,type=bool));sidebar.addWidget(self.quality_stack)
+        self.normalize_stack=W.QCheckBox('Normalize exposure times to reference');self.normalize_stack.setChecked(self.settings_store.value('stack/normalize',False,type=bool));sidebar.addWidget(self.normalize_stack)
+        self.quality_stack.setToolTip('Relative weights 0.25–4 within comparable target/filter groups. Fewer than 6 measured stars retain neutral weight. This does not remove whole frames.')
+        self.normalize_stack.setToolTip('Optional: use calibrated frames. Camera offsets are scaled too. Requires positive exposure metadata on every frame. Linear values are scaled to the reference exposure; total exposure records actual accepted times.')
+        stack_note=W.QLabel('Robust mode rejects bright/dark outliers using median/MAD when at least 8 samples cover a pixel. Smaller stacks use a weighted mean. Use Preview / rate exposures to review frames first.');stack_note.setWordWrap(True);sidebar.addWidget(stack_note)
+        def stack_preferences():
+            self.settings_store.setValue('stack/rejection',self.rejection.currentIndex());self.settings_store.setValue('stack/quality',self.quality_stack.isChecked());self.settings_store.setValue('stack/normalize',self.normalize_stack.isChecked())
+            enabled=self.rejection.currentIndex()==0;self.quality_stack.setEnabled(enabled);self.normalize_stack.setEnabled(enabled)
+        self.rejection.currentIndexChanged.connect(stack_preferences);self.quality_stack.toggled.connect(stack_preferences);self.normalize_stack.toggled.connect(stack_preferences);stack_preferences()
         self.run = W.QPushButton('Align and stack exposures'); self.run.clicked.connect(lambda: self.start(False)); sidebar.addWidget(self.run)
         self.cancel = W.QPushButton('Cancel'); self.cancel.clicked.connect(lambda: self.worker.requestInterruption() if self.worker else None); self.cancel.setEnabled(False); sidebar.addWidget(self.cancel)
         self.next_adjust = W.QPushButton('Continue to step 4: Adjust and Crop →')
@@ -201,6 +217,7 @@ class Window(W.QMainWindow):
             row=SliderValueRow(low,high,default,formatter=formatter);row.setToolTip(tooltip);target.addWidget(row)
             slider=row.slider;self.sliders[name]=slider;self.slider_rows[name]=row;self.slider_defaults[name]=default
             slider.valueChanged.connect(self.schedule_preview);slider.sliderPressed.connect(self.commit_history);slider.sliderReleased.connect(self.commit_history);slider.sliderReleased.connect(self.schedule_preview)
+        self.background_button=W.QPushButton('Background extraction — choose sky samples…');self.background_button.clicked.connect(self.edit_background);sidebar.addWidget(self.background_button)
         self.curve_group=W.QGroupBox('Luminance curve — shadows, midtones, highlights');curve_layout=W.QVBoxLayout(self.curve_group);sidebar.addWidget(self.curve_group)
         self.curve=ToneCurve();curve_layout.addWidget(self.curve)
         curve_hint=W.QLabel('Drag the three interior points up/down. Black and white stay fixed.');curve_hint.setWordWrap(True);curve_layout.addWidget(curve_hint)
@@ -400,6 +417,7 @@ class Window(W.QMainWindow):
         self._history_ready=False
         self.solution_header=None
         self.annotations=[];self.labels_visible=True;self.refresh_labels();self.labels_dock.hide();self.preview.annotation_placing=False
+        self.background_fit=None
         self.linear=self.header=self.rendered=None
         self.original_linear=self.original_header=self.background=None
         self.project_path=None;self.source_name='image';self.source_paths=[]
@@ -456,7 +474,7 @@ class Window(W.QMainWindow):
         self.cancel.setEnabled(True)
         self.progress_bar.setRange(0, 0)
         self.progress_text.setText('Loading image…' if single else 'Preparing exposures…')
-        self.worker = Worker(paths, self.bayer.currentText(), single, self.use_gpu.isChecked())
+        self.worker = Worker(paths, self.bayer.currentText(), single, self.use_gpu.isChecked(),dict(rejection='robust' if self.rejection.currentIndex()==0 else 'legacy',quality=self.quality_stack.isChecked(),normalize_exposure=self.normalize_stack.isChecked()))
         self.worker.message.connect(self.log.appendPlainText)
         self.worker.progress.connect(self.update_progress)
         self.worker.result.connect(self.loaded)
@@ -489,6 +507,7 @@ class Window(W.QMainWindow):
         self.source_paths=list(getattr(self,'pending_source_paths',[]))
         self.applied_crop=(0,0,linear.shape[1],linear.shape[0])
         self.source_name = getattr(self, 'pending_source_name', 'image')
+        self.background_fit=None
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
         self.reset_crop_controls()
@@ -634,6 +653,7 @@ class Window(W.QMainWindow):
             slider.setValue(0 if self.header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name])
         self.baseline.setChecked(False)
         self.curve.set_values(NEUTRAL_CURVE)
+        self.background_fit=None;self.background=self.make_background(self.linear)
         self.timer.stop()
         self.update_preview()
         self.commit_history()
@@ -724,8 +744,20 @@ class Window(W.QMainWindow):
         self.labels_visible=True;self.refresh_labels();self.commit_history();self.update_actions()
         self.log.appendPlainText(f'Added {added} catalog labels. Existing duplicates were kept once; projects support up to 500 labels. Check positions against visible stars.')
 
+    def edit_background(self):
+        if self.linear is None or self.worker is not None or self.project_worker is not None:return
+        dialog=BackgroundDialog(self.original_linear,self.background_fit,self)
+        if dialog.exec()!=W.QDialog.Accepted:return
+        self.commit_history();self.background_fit=copy.deepcopy(dialog.config)
+        self.background=self.make_background(self.linear)
+        self.sliders['Background correction %'].setValue(100)
+        self.update_preview();self.commit_history()
+        self.log.appendPlainText('Background extraction: '+('selected sky samples applied.' if self.background_fit else 'automatic fit restored.'))
     def make_background(self,image):
-        model=engine.background_model(image)
+        if self.background_fit:
+            coefficients,_=fit_sky(self.original_linear,self.background_fit)
+            model=cropped_coefficients(coefficients,self.applied_crop,self.original_linear.shape)
+        else:model=engine.background_model(image)
         return dict(display_encoded=True,background=model) if self.header.get('EASRASTR') else model
     def save_chime_preference(self,value):
         self.settings_store.setValue('notifications/stack_sound',value);self.settings_store.sync()
@@ -830,7 +862,7 @@ class Window(W.QMainWindow):
             self.log.appendPlainText('Saved '+path)
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
     def edit_state(self):
-        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},curve=list(self.curve.values),compare=self.baseline.isChecked(),
+        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},curve=list(self.curve.values),background_fit=copy.deepcopy(self.background_fit),compare=self.baseline.isChecked(),
                     annotations=copy.deepcopy(self.annotations),labels_visible=self.labels_visible,applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
     def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
@@ -848,6 +880,8 @@ class Window(W.QMainWindow):
         if not hasattr(self,'undo_action'):return
         busy=self.worker is not None or self.project_worker is not None
         self.advanced_toggle.setText('Advanced: sky, color and noise'+(' • active' if any(self.sliders[name].value()!=self.slider_defaults[name] for name in self.advanced_names) else ''))
+        self.background_button.setEnabled(not busy and self.linear is not None)
+        self.rejection.setEnabled(not busy);self.quality_stack.setEnabled(not busy and self.rejection.currentIndex()==0);self.normalize_stack.setEnabled(not busy and self.rejection.currentIndex()==0)
         self.review.setEnabled(not busy and self.files.count()>0)
         self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
@@ -874,11 +908,14 @@ class Window(W.QMainWindow):
         self.validate_edit_state(state,self.original_linear.shape)
         self._restoring=True;self.history_timer.stop();self.timer.stop()
         try:
+            config=copy.deepcopy(state.get('background_fit'))
+            fit_changed=config!=self.background_fit;self.background_fit=config
             rect=tuple(state['applied_crop'])
             if rect!=self.applied_crop:
                 x0,y0,x1,y1=rect;h,w,_=self.original_linear.shape
                 self.linear,self.header=engine.crop_image(self.original_linear,self.original_header,x0,w-x1,y0,h-y1)
                 self.applied_crop=rect;self.background=self.make_background(self.linear)
+            if fit_changed:self.background=self.make_background(self.linear)
             self.curve.set_values(state.get('curve',list(NEUTRAL_CURVE)))
             self.annotations=copy.deepcopy(state.get('annotations',[]));self.labels_visible=state.get('labels_visible',True);self.refresh_labels()
             for name,value in state['sliders'].items():
@@ -1036,6 +1073,15 @@ if __name__ == '__main__':
         with AlignedFrames(sample.shape) as frames:
             frames.append(sample);frames.append(sample)
             assert np.array_equal(combine(frames),sample)
+        from stack_store import robust_weighted_mean
+        trail=np.ones((8,20),dtype=np.float32)*100;trail[:2,:5]=10000
+        assert np.all(robust_weighted_mean(trail,np.ones(8))==100)
+        with AlignedFrames(sample.shape) as frames:
+            for _ in range(8):frames.append(sample)
+            assert np.array_equal(combine(frames,rejection='robust',weights=np.ones(8)),sample)
+        from background_extraction import sky_grid,fit_sky
+        fit_sky(sample,dict(order=1,points=sky_grid()))
+        background_dialog=BackgroundDialog(sample);background_dialog.reject()
         window.loaded(sample, fits.Header())
         assert window.reset_crop_preview.isEnabled() and window.auto_sky_preview.isEnabled()
         window.auto_sky_preview.click()
