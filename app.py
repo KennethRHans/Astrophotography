@@ -186,6 +186,7 @@ class Window(W.QMainWindow):
             'Midtones %':('Midtones — faint detail',-100,100,0,'Positive values brighten intermediate tones; negative values darken them. Black/white endpoints are fixed. Uses a luminance midtones transfer.',lambda v:f'{v:+d}%'),
             'Star-preserving noise reduction %':('Noise reduction — star/edge protected',0,100,0,'Edge-aware noise reduction with a protective mask. Start low. Strong settings can still suppress faint detail; this is not a substitute for calibration or more exposure.',percent),
             'Background correction %':('Gradient removal',0,100,0,'Quadratic background correction. Extended nebulosity may be mistaken for sky; use cautiously.',percent),
+            'Background neutralization %':('Background color neutralization',0,100,0,'Reduces an estimated sky color cast before stretching. Can alter faint colored nebulosity; this is not photometric color calibration. 0% is off.',percent),
             'Red balance %':('Red balance — manual',50,200,100,'Relative red-channel gain; not photometric color calibration.',percent),
             'Green balance %':('Green balance — manual',50,200,100,'Relative green-channel gain; not photometric color calibration.',percent),
             'Blue balance %':('Blue balance — manual',50,200,100,'Relative blue-channel gain; not photometric color calibration.',percent),
@@ -629,10 +630,10 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE,0)
+        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE,0,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
-                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values),v['Sky brightness (stops ×100)']/100)
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values),v['Sky brightness (stops ×100)']/100,v['Background neutralization %']/100)
     def preview_request(self):
         h,w,_=self.linear.shape
         scale=max(self.preview.transform().m11(),.01)
@@ -1002,6 +1003,7 @@ class Window(W.QMainWindow):
         try:
             linear,header,meta=payload
             for state in [meta['state'],*meta.get('history',{}).get('states',[])]:
+                state['sliders'].setdefault('Background neutralization %',0)
                 state['sliders'].setdefault('Sky brightness (stops ×100)',0)
                 state['sliders'].setdefault('Sky background %',0);state.setdefault('annotations',[]);state.setdefault('labels_visible',True)
                 state['sliders'].setdefault('Midtones %',0);state['sliders'].setdefault('Star-preserving noise reduction %',0);state['sliders'].setdefault('Star protection %',100);state.setdefault('curve',list(NEUTRAL_CURVE))
@@ -1148,6 +1150,7 @@ if __name__ == '__main__':
         window.reset_crop_preview.click();assert window.crop_ratio.currentText()=='Free'
         window.preview.set_zoom(1)
         window.zoom_fit.click()
+        window.sliders['Background neutralization %'].setValue(75)
         window.sliders['Midtones %'].setValue(30)
         window.sliders['Star-preserving noise reduction %'].setValue(40)
         window.curve.set_values((0,200,600,850,1000),emit=True)

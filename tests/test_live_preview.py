@@ -49,7 +49,7 @@ def test_friendly_units_and_advanced_controls_keep_project_keys(tmp_path):
     assert w.slider_rows['Black percentile ×100'].value_label.text()=='0.10%'
     w.sliders['Brightness (stops ×100)'].setValue(25)
     assert w.slider_rows['Brightness (stops ×100)'].value_label.text()=='+0.25 stops'
-    assert len(w.sliders)==15 and set(w.edit_state()['sliders'])==set(w.slider_defaults)
+    assert len(w.sliders)==16 and set(w.edit_state()['sliders'])==set(w.slider_defaults)
     assert not w.advanced_toggle.isChecked();w.advanced_toggle.setChecked(True);assert not w.advanced_panel.isHidden()
     w.close();settle(app,w)
 

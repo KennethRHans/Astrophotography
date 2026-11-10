@@ -22,19 +22,26 @@ class PreviewRenderer:
 
     @staticmethod
     def entry(small):
-        return dict(small=small,key=None,normalization=None,noise_key=None,prepared=None,
+        return dict(small=small,key=None,normalization=None,noise_key=None,prepared=None,color_key=None,color_offsets=None,
                     histogram_key=None,histogram=None)
 
     @staticmethod
-    def prepare(entry,key,settings,model,statistics):
+    def prepare(entry,key,settings,model,statistics,color_offsets=None):
         if key!=entry['key']:
             entry['normalization']=engine.normalize_image(entry['small'],settings[1],settings[4],settings[5],model,statistics)
             entry['key']=key
         noise=settings[10] if len(settings)>10 else 0
         protection=settings[11] if len(settings)>11 else 1
-        noise_key=(key,noise,protection)
+        neutralization=settings[14] if len(settings)>14 else 0
+        if neutralization and color_offsets is None:
+            if entry['color_key']!=key:
+                entry['color_offsets']=engine.background_color_offsets(entry['normalization'][0],entry['normalization'][1])
+                entry['color_key']=key
+            color_offsets=entry['color_offsets']
+        noise_key=(key,noise,protection,neutralization)
         if entry['noise_key']!=noise_key:
-            entry['prepared']=star_preserving_denoise(entry['normalization'][0],noise,protection,entry['normalization'][1])
+            adjusted=engine.neutralize_background(entry['normalization'][0],neutralization,entry['normalization'][1],color_offsets)
+            entry['prepared']=star_preserving_denoise(adjusted,noise,protection,entry['normalization'][1])
             entry['noise_key']=noise_key
 
     @staticmethod
@@ -73,7 +80,7 @@ class PreviewRenderer:
                     entry=self.entry(small)
             self.cache[size]=entry
             while len(self.cache)>2:self.cache.popitem(last=False)
-            self.prepare(entry,key,settings,model,statistics)
+            self.prepare(entry,key,settings,model,statistics,reference['color_offsets'])
             self.size=size;self.small=entry['small']
             self.normalization=entry['normalization'];self.normalization_key=key
             image=reference_image if entry is reference and reference_image is not None else self.draw(entry,settings,model,gpu)

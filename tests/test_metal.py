@@ -29,7 +29,7 @@ def test_metal_matches_cpu_and_preserves_input():
         ]:
             settings = dict(stretch=stretch, denoise=smoothing, saturation=saturation,
                             brightness=brightness, contrast=contrast, sky=.75, midtones=.35,
-                            star_denoise=.4, star_protection=.8, curve=(0,350,650,820,1000))
+                            star_denoise=.4, star_protection=.8, curve=(0,350,650,820,1000), background_neutralization=.75)
             expected = engine.render(image, **settings)
             actual = engine.render(image, gpu=processor, **settings)
             assert not processor.disabled, processor.last_error
@@ -37,7 +37,7 @@ def test_metal_matches_cpu_and_preserves_input():
             np.testing.assert_array_equal(image, original)
         from preview_render import PreviewRenderer
         renderer=PreviewRenderer()
-        settings=(30,.1,1,.8,0,(1,1,.75),.2,1.1,0)
+        settings=(30,.1,1,.8,0,(1,1,.75),.2,1.1,0,0,0,1,(0,250,500,750,1000),0,.75)
         draft=renderer.render(image,(50,40),settings,None,processor,False)
         settled=renderer.render(image,(100,80),settings,None,processor,False)
         assert not processor.disabled

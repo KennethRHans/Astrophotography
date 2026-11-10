@@ -202,3 +202,46 @@ histogram label. Full-resolution export processing is unchanged.
 Coverage includes large noisy/star-field data, multiple slider settings,
 draft/final/zoom changes, normalization/cache bounds, stale queued results after
 release, and the Metal rendering path on Mac hardware.
+
+## Optional background color neutralization
+
+Step 4's Advanced section includes Background color neutralization, 0–100%.
+Default 0% preserves the previous rendering. Before stretching, the adjustment
+estimates RGB medians from a fixed sample's middle-low luminance band (25th to
+60th percentile), excludes invalid borders and nonfinite pixels, and subtracts
+channel color offsets toward a common luminance-weighted gray. It is a global
+background estimate, not photometric color calibration or a spatial gradient
+removal. Colored nebulosity can bias the estimate. Strong correction can increase
+shadow clipping; watch the histogram and compare at lower strength.
+
+Preview levels share the same offsets, preserving histogram stability during
+slider release. The adjustment precedes protected noise reduction and CPU/Metal
+stretch/color processing. Undo, redo, Reset, Compare, projects and old-history
+migration include the new setting; older projects receive zero strength.
+Original pixels and linear FITS exports are unchanged. Local tests cover neutral
+sky estimates, above-background star-signal preservation without clipping, mask
+handling, CPU fallback, cache invalidation and project/history migration.
+The M74 diagnostic was local only; its image was not added to the repository.
+Metal and sandbox package validation runs in the macOS build workflow.
+
+## Exposure-review display stretch
+
+Preview / rate exposures now defaults to Auto stretch (darker sky), with the
+previous Standard stretch available in its Display selector. Auto estimates
+median luminance and MAD noise from a bounded original-pixel sample, sets a
+shadow point at approximately three noise sigmas below the median, preserves
+the full image's bright end, and chooses a linked-RGB midtones transfer targeting
+about 16% display sky luminance. It estimates from the source before resizing,
+so Full resolution does not redefine the sky statistics. This is display-only
+and not photometric color calibration; clouds/nebulosity can bias the estimate.
+
+The review worker's scan path still feeds original decoded linear data directly
+to the existing measurements and scores. No stretch, clipping, color correction
+or preview interpolation is applied to that analysis data. Local tests cover
+noisy sparse-star exposures, bright outliers, preview/native resolution,
+unchanged raw arrays and scores, mask handling and the dialog's mode switch.
+The supplied 20-second M74 Light frame was validated locally: the standard
+preview median display luminance was about 0.666, versus 0.160 in Auto at both
+preview and native resolution. Decoded-pixel hashes and all measured quality
+metrics were identical before and after preview rendering. The user image is
+not included in the repository.
