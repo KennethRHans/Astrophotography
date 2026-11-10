@@ -188,3 +188,17 @@ Before App Store submission, repeat import/stack, all exports, project/history
 round trips, live slider/curve editing, labels, offline identification, optional
 online services, and minimize/Dock restore on physical Apple Silicon hardware.
 This remains an ad hoc signed development package, not a submission package.
+
+## Stable histogram during live adjustments
+
+Draft and settled previews now share black/white normalization statistics from
+one fixed, bounded source-pixel sample (maximum side 512). The histogram and
+clipping percentages use that same sample, independently of preview resolution
+or zoom. Changing slider values still updates the sample rendering; releasing
+a slider refines image detail without changing the histogram's sampled input.
+Large-image statistics remain estimates, as indicated by the preview-sample
+histogram label. Full-resolution export processing is unchanged.
+
+Coverage includes large noisy/star-field data, multiple slider settings,
+draft/final/zoom changes, normalization/cache bounds, stale queued results after
+release, and the Metal rendering path on Mac hardware.

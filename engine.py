@@ -185,19 +185,32 @@ def adjust_sky(image,amount=0):
     return np.clip(image+np.float32(amount*.25)*weight[...,None],0,1)
 
 
-def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+def normalization_statistics(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+    """Measure shared preview black/white points on a fixed source sample."""
     if isinstance(model,dict) and model.get('display_encoded'):
         image=correct_background(linear,gradient,model['background'])
-        floor=np.percentile(image,black,axis=(0,1)) if black else 0
+        return (np.percentile(image,black,axis=(0,1)) if black else 0),1.
+    image=correct_background(linear,gradient,model)
+    valid=(linear>0).all(axis=-1)
+    if not np.any(valid):return np.zeros(3),1.
+    floor=np.percentile(image[valid],black,axis=0)
+    scaled=np.maximum(image-floor,0)*np.asarray(gains,dtype=np.float32)
+    return floor,max(float(np.percentile(scaled[valid],99.9)),1e-12)
+
+
+def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None,statistics=None):
+    if isinstance(model,dict) and model.get('display_encoded'):
+        image=correct_background(linear,gradient,model['background'])
+        floor=(np.percentile(image,black,axis=(0,1)) if black else 0) if statistics is None else statistics[0]
         return np.clip((image-floor)*np.asarray(gains,dtype=np.float32),0,1),np.ones(linear.shape[:2],dtype=bool)
     image=correct_background(linear,gradient,model)
     valid=(linear>0).all(axis=-1)
     sample=image[valid]
     if not sample.size:return np.zeros_like(image),valid
-    floor=np.percentile(sample,black,axis=0)
+    floor=np.percentile(sample,black,axis=0) if statistics is None else statistics[0]
     image=np.maximum(image-floor,0)
     image*=np.asarray(gains,dtype=np.float32)
-    white=max(float(np.percentile(image[valid],99.9)),1e-12)
+    white=max(float(np.percentile(image[valid],99.9)),1e-12) if statistics is None else statistics[1]
     return np.clip(image/white,0,1),valid
 
 

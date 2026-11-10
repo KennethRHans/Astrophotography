@@ -35,6 +35,14 @@ def test_metal_matches_cpu_and_preserves_input():
             assert not processor.disabled, processor.last_error
             np.testing.assert_allclose(actual, expected, atol=3e-5, rtol=3e-5)
             np.testing.assert_array_equal(image, original)
+        from preview_render import PreviewRenderer
+        renderer=PreviewRenderer()
+        settings=(30,.1,1,.8,0,(1,1,.75),.2,1.1,0)
+        draft=renderer.render(image,(50,40),settings,None,processor,False)
+        settled=renderer.render(image,(100,80),settings,None,processor,False)
+        assert not processor.disabled
+        np.testing.assert_array_equal(draft['bins'],settled['bins'])
+        assert (draft['black'],draft['white'])==(settled['black'],settled['white'])
     finally:
         processor.close()
 
