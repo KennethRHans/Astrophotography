@@ -1,8 +1,45 @@
-# Easy Astro Studio — 1.5.0 Store update
+# Easy Astro Studio — 1.5.1 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Windows preview and background updates (1.5.1)
+
+Ports the shared processing changes described in the
+[Apple-to-Windows handoff](https://github.com/KennethRHans/Astrophotography/blob/0ccb383b5bee89761501b31990309027f2c44747/WINDOWS_HANDOFF.md),
+without macOS packaging, sandbox access, legacy Mac-only settings or Metal code.
+Windows continues to use OpenCL with CPU fallback.
+
+* **Stable histogram:** normalization statistics, RGB histogram and clipping
+  percentages use one bounded grid sample of original source pixels across live
+  drafts, settled previews and zoom levels. Histograms respond to edits without
+  jumping at pointer release. The graph is labeled Fixed source sample; it is
+  an estimate and may omit isolated sources. Full-resolution raster export still
+  measures its own full-image normalization, so it can differ from the preview.
+* **Background color neutralization:** an Advanced slider from 0–100%, default
+  off, estimates a global sky cast from middle-low luminance pixels. It runs
+  before protected denoising and stretching, with shared offsets across preview
+  sizes. Colored nebulosity can bias the estimate and strong settings can clip
+  shadows. This is not photometric color calibration. Old projects/history default
+  to off; Undo/Redo, Reset, Compare and project saving include the control.
+* **Darker exposure review:** Auto stretch (darker sky) is now the default in
+  Preview / rate exposures. Standard stretch remains selectable. Original-pixel
+  median/MAD statistics, the full bright end and a linked-RGB midtones transform
+  target about 16% sky luminance. Preview size/full-resolution switching preserves
+  those statistics. Measurements and relative scores still use original data.
+
+Neutralization runs on the CPU before the Windows GPU renderer; OpenCL parity
+and device-failure fallback are tested. No dependency or network behavior changes.
+TIFF/PNG/JPEG exports include display adjustments. **Save stacked FITS and FITS
+export retain linear source pixels**, including their original color cast;
+neutralization is not baked into linear FITS. Mixed-exposure weighting and
+metadata improvements remain separate work.
+
+Local validation: all 114 tests and the application smoke test passed, plus
+focused export/reset/compare regression checks. Synthetic-image live dragging
+still displayed intermediate updates and delivered the latest settings. Windows
+packaged validation is run separately before distributing the installer.
 
 ## Midtones, tone curves and protected noise reduction (1.5.0)
 
@@ -30,26 +67,6 @@ draft preview; release and raster exports apply the final requested adjustments.
 Full-resolution JPG/PNG/TIFF exports include the new tools. Linear FITS exports
 retain original stacked values and are unaffected by display adjustments.
 No data collection or network behavior has changed.
-
-All 103 local tests and the application smoke test passed. Coverage includes
-neutral tone identity, monotone curves, RGB ratios, synthetic-star core retention,
-background noise reduction, CPU/OpenCL agreement, filtered-preview cache reuse,
-curve drag/Undo/reset, project round trips and migration, and unchanged linear
-FITS export. A local CPU fit-view check with noise reduction enabled displayed
-47 updates during a roughly 0.6-second drag and showed the final settings; this
-is not a Windows GPU benchmark or a frame-rate guarantee.
-
-Windows validation passed: packaged application smoke checks, development and
-exact Store-identity installation/activation, Program Files/desktop shortcut
-installation and upgrade from the earlier app. The public Gaia protocol check
-also passed.
-
-[Download the 1.5.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13716969218).
-Extract and run `installer/EasyAstroStudio-1.5.0-Setup.exe`.
-
-[Download the 1.5.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42714109719/artifacts/13717786733).
-Extract and upload `EasyAstroStudio-1.5.0-x64-Store-UNSIGNED.msix` to Partner Center.
-Test the adjustments on your own Windows images before submitting.
 
 ## Live slider previews and clearer adjustment controls (1.4.2)
 

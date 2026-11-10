@@ -185,27 +185,73 @@ def adjust_sky(image,amount=0):
     return np.clip(image+np.float32(amount*.25)*weight[...,None],0,1)
 
 
-def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+def normalization_statistics(linear,black=.1,gradient=0,gains=(1,1,1),model=None):
+    """Measure shared preview black/white points on a fixed source sample."""
     if isinstance(model,dict) and model.get('display_encoded'):
         image=correct_background(linear,gradient,model['background'])
-        floor=np.percentile(image,black,axis=(0,1)) if black else 0
+        return (np.percentile(image,black,axis=(0,1)) if black else 0),1.
+    image=correct_background(linear,gradient,model)
+    valid=(linear>0).all(axis=-1)
+    if not np.any(valid):return np.zeros(3),1.
+    floor=np.percentile(image[valid],black,axis=0)
+    scaled=np.maximum(image-floor,0)*np.asarray(gains,dtype=np.float32)
+    return floor,max(float(np.percentile(scaled[valid],99.9)),1e-12)
+
+
+def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None,statistics=None):
+    if isinstance(model,dict) and model.get('display_encoded'):
+        image=correct_background(linear,gradient,model['background'])
+        floor=(np.percentile(image,black,axis=(0,1)) if black else 0) if statistics is None else statistics[0]
         return np.clip((image-floor)*np.asarray(gains,dtype=np.float32),0,1),np.ones(linear.shape[:2],dtype=bool)
     image=correct_background(linear,gradient,model)
     valid=(linear>0).all(axis=-1)
     sample=image[valid]
     if not sample.size:return np.zeros_like(image),valid
-    floor=np.percentile(sample,black,axis=0)
+    floor=np.percentile(sample,black,axis=0) if statistics is None else statistics[0]
     image=np.maximum(image-floor,0)
     image*=np.asarray(gains,dtype=np.float32)
-    white=max(float(np.percentile(image[valid],99.9)),1e-12)
+    white=max(float(np.percentile(image[valid],99.9)),1e-12) if statistics is None else statistics[1]
     return np.clip(image/white,0,1),valid
 
 
+def background_color_offsets(image,valid=None):
+    """Estimate a global sky-color offset, not a photometric calibration.
+
+    Use a fixed source-grid sample and a middle-low luminance band to reduce
+    influence from bright stars, dark borders and isolated outliers. Diffuse
+    colored objects can still enter this band, hence the opt-in strength.
+    """
+    step=max(1,int(np.ceil(max(image.shape[:2])/512)))
+    sample=image[::step,::step]
+    good=np.isfinite(sample).all(axis=-1)
+    if valid is not None:good &= valid[::step,::step]
+    pixels=sample[good]
+    if len(pixels)<16:return np.zeros(3,dtype=np.float32)
+    luma=np.array([.2126,.7152,.0722],dtype=np.float32)
+    light=pixels@luma
+    low,high=np.percentile(light,[25,60])
+    sky=pixels[(light>=low)&(light<=high)]
+    if len(sky)<16:return np.zeros(3,dtype=np.float32)
+    color=np.median(sky,axis=0)
+    neutral=float(color@luma)
+    return np.asarray(color-neutral,dtype=np.float32)
+
+
+def neutralize_background(image,amount=0,valid=None,offsets=None):
+    if amount==0:return image
+    if not np.isfinite(amount) or not 0<=amount<=1:
+        raise ValueError('Background neutralization must be between 0 and 1')
+    offsets=background_color_offsets(image,valid) if offsets is None else offsets
+    result=np.clip(image-np.float32(amount)*np.asarray(offsets,dtype=np.float32),0,1)
+    if valid is not None:result[~valid]=0
+    return result
+
+
 def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
-           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, midtones=0, star_denoise=0, star_protection=1, curve=NEUTRAL_CURVE, model=None, gpu=None,normalization=None,prepared=None):
+           gradient=0, gains=(1, 1, 1), brightness=0, contrast=1, sky=0, midtones=0, star_denoise=0, star_protection=1, curve=NEUTRAL_CURVE, background_neutralization=0, model=None, gpu=None,normalization=None,prepared=None):
     image,valid=normalization if normalization is not None else normalize_image(linear,black,gradient,gains,model)
     if not np.any(valid):return np.zeros_like(image)
-    image=prepared if prepared is not None else star_preserving_denoise(image,star_denoise,star_protection,valid)
+    image=prepared if prepared is not None else star_preserving_denoise(neutralize_background(image,background_neutralization,valid),star_denoise,star_protection,valid)
     if gpu is not None and not gpu.disabled:
         try:
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)

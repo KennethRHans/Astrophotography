@@ -185,6 +185,7 @@ class Window(W.QMainWindow):
             'Red balance %':('Red balance — manual',50,200,100,'Relative red-channel gain; not photometric color calibration.',percent),
             'Green balance %':('Green balance — manual',50,200,100,'Relative green-channel gain; not photometric color calibration.',percent),
             'Blue balance %':('Blue balance — manual',50,200,100,'Relative blue-channel gain; not photometric color calibration.',percent),
+            'Background neutralization %':('Background color neutralization',0,100,0,'Reduces an estimated sky color cast before stretching. Can alter faint colored nebulosity; this is not photometric color calibration. 0% is off.',percent),
             'Star protection %':('Noise reduction — star protection',0,100,100,'Protection of detected bright structures and nearby wings. 100% is recommended. Very faint stars may not enter the mask.',percent),
             'Noise smoothing ×100':('Legacy smoothing — ordinary blur',0,150,0,'Gaussian smoothing can soften stars and fine structure. Leave off unless needed; this is not a star-preserving denoiser.',lambda v:f'{v/100:.2f} px'),
             'Sky background %':('Shadows / sky brightness',-100,100,0,'Offsets darker tones, including faint nebulosity. This is not a measured sky-only mask.',lambda v:f'{v:+d}%')}
@@ -265,7 +266,7 @@ class Window(W.QMainWindow):
         self.progress_bar = W.QProgressBar(); self.progress_bar.setRange(0, 100); self.progress_bar.setValue(0); right.addWidget(self.progress_bar)
         self.histogram_panel=W.QFrame();self.histogram_panel.setObjectName('histogramPanel')
         hist_layout=W.QVBoxLayout(self.histogram_panel);hist_layout.setContentsMargins(8,5,8,5);hist_layout.setSpacing(3)
-        hist_layout.addWidget(W.QLabel('RGB histogram • Black → White • Log scale • Preview sample'))
+        hist_layout.addWidget(W.QLabel('RGB histogram • Black → White • Log scale • Fixed source sample'))
         self.histogram=HistogramView();hist_layout.addWidget(self.histogram)
         self.clip_summary=W.QLabel('Black clipping: 0% • White clipping: 0%');hist_layout.addWidget(self.clip_summary)
         self.mark_clipping=W.QCheckBox('Mark clipped pixels in preview (blue: black, red: white)')
@@ -642,10 +643,10 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE)
+        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
-                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values))
+                v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values),v['Background neutralization %']/100)
     def preview_request(self):
         h,w,_=self.linear.shape
         scale=max(self.preview.transform().m11(),.01)
@@ -947,6 +948,7 @@ class Window(W.QMainWindow):
         try:
             linear,header,meta=payload
             for state in [meta['state'],*meta.get('history',{}).get('states',[])]:
+                state['sliders'].setdefault('Background neutralization %',0)
                 state['sliders'].setdefault('Sky background %',0);state.setdefault('annotations',[]);state.setdefault('labels_visible',True)
                 state['sliders'].setdefault('Midtones %',0);state['sliders'].setdefault('Star-preserving noise reduction %',0);state['sliders'].setdefault('Star protection %',100);state.setdefault('curve',list(NEUTRAL_CURVE))
             self.validate_edit_state(meta['state'],linear.shape)
@@ -1050,6 +1052,7 @@ if __name__ == '__main__':
         window.reset_crop_preview.click();assert window.crop_ratio.currentText()=='Free'
         window.preview.set_zoom(1)
         window.zoom_fit.click()
+        window.sliders['Background neutralization %'].setValue(75)
         window.sliders['Midtones %'].setValue(30)
         window.sliders['Star-preserving noise reduction %'].setValue(40)
         window.curve.set_values((0,200,600,850,1000),emit=True)

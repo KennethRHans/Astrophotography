@@ -6,6 +6,7 @@ from PySide6 import QtCore,QtGui,QtWidgets as W
 import engine
 from frame_quality import measure,rate_batch
 from preview import ImagePreview
+from review_stretch import render_review
 
 
 class ReviewPreview(ImagePreview):
@@ -27,8 +28,8 @@ class ReviewWorker(QtCore.QThread):
     previewReady=QtCore.Signal(str,object,str)
     progress=QtCore.Signal(int,int)
     failed=QtCore.Signal(str)
-    def __init__(self,paths,bayer,scan=False,full=False):
-        super().__init__();self.paths=list(paths);self.bayer=bayer;self.scan=scan;self.full=full
+    def __init__(self,paths,bayer,scan=False,full=False,auto_stretch=True):
+        super().__init__();self.paths=list(paths);self.bayer=bayer;self.scan=scan;self.full=full;self.auto_stretch=auto_stretch
     def run(self):
         for index,path in enumerate(self.paths):
             if self.isInterruptionRequested():break
@@ -39,10 +40,16 @@ class ReviewWorker(QtCore.QThread):
                 else:
                     h,w,_=data.shape
                     scale=1 if self.full else max(1,max(h,w)/1600)
-                    small=cv2.resize(data,(max(1,round(w/scale)),max(1,round(h/scale))),interpolation=cv2.INTER_AREA) if scale>1 else data
-                    pixels=np.ascontiguousarray(np.round(engine.render(small)*255).astype(np.uint8))
+                    size=(max(1,round(w/scale)),max(1,round(h/scale)))
+                    if self.auto_stretch:
+                        rendered=render_review(data,size)
+                    else:
+                        small=cv2.resize(data,size,interpolation=cv2.INTER_AREA) if scale>1 else data
+                        rendered=engine.render(small)
+                    pixels=np.ascontiguousarray(np.round(rendered*255).astype(np.uint8))
                     mode='Full resolution' if self.full else 'Preview (up to 1600 px); enable Full resolution to inspect stars'
-                    self.previewReady.emit(path,(pixels,(w,h)),f'{Path(path).name} • {w} × {h} • {mode}')
+                    display='Auto stretch (darker sky)' if self.auto_stretch else 'Standard stretch'
+                    self.previewReady.emit(path,(pixels,(w,h)),f'{Path(path).name} • {w} × {h} • {mode} • {display}')
                 del data
             except Exception as exc:
                 if self.scan:self.rowReady.emit(path,dict(stars=0,fwhm=None,elongation=None,score=None,status=str(exc)))
@@ -82,8 +89,13 @@ class FrameReviewDialog(W.QDialog):
         fit=W.QPushButton('Fit');fit.clicked.connect(self.view.fit_image);zoom.addWidget(fit)
         native=W.QPushButton('100%');native.clicked.connect(lambda:self.view.set_zoom(1));zoom.addWidget(native)
         self.full=W.QCheckBox('Full resolution (slower)');zoom.addWidget(self.full)
+        display=W.QHBoxLayout();column.addLayout(display);display.addWidget(W.QLabel('Display:'))
+        self.stretch_mode=W.QComboBox();self.stretch_mode.addItems(['Auto stretch (darker sky)','Standard stretch'])
+        self.stretch_mode.setToolTip('Display only. Measurements, scores and source pixels are unchanged. Auto estimates the sky level; it does not color-calibrate the exposure.')
+        display.addWidget(self.stretch_mode,1)
+        self.stretch_mode.currentIndexChanged.connect(lambda *_:self.start_preview())
         split.addWidget(right);split.setSizes([620,560])
-        note=W.QLabel('Scores compare matching target, dimensions, exposure time and filter only. Higher favors sharper, rounder stars and more detections. Clouds, nebulosity, hot pixels and missing metadata can mislead scoring; a score cannot guarantee alignment. Approximate FWHM is measured on a reduced image.')
+        note=W.QLabel('Scores compare matching target, dimensions, exposure time and filter only. Higher favors sharper, rounder stars and more detections. Clouds, nebulosity, hot pixels and missing metadata can mislead scoring; a score cannot guarantee alignment. Approximate FWHM is measured on a reduced image. Display stretch changes only the preview; analysis uses the original linear pixels.')
         note.setWordWrap(True);root.addWidget(note)
         self.progress=W.QProgressBar();self.progress.setValue(0);root.addWidget(self.progress)
         self.status=W.QLabel('Choose a frame to preview, or analyze all exposures.');self.status.setWordWrap(True);root.addWidget(self.status)
@@ -108,7 +120,7 @@ class FrameReviewDialog(W.QDialog):
     def launch(self,worker):
         if self.worker is not None:return
         self.worker=worker
-        for control in (self.preview_button,self.analyze,self.best,self.use,self.full):control.setEnabled(False)
+        for control in (self.preview_button,self.analyze,self.best,self.use,self.full,self.stretch_mode):control.setEnabled(False)
         self.cancel.setEnabled(True)
         self.progress.setRange(0,len(worker.paths));self.progress.setValue(0)
         worker.rowReady.connect(self.receive_row);worker.previewReady.connect(self.receive_preview)
@@ -123,7 +135,7 @@ class FrameReviewDialog(W.QDialog):
             self.caption.setText('Loading '+Path(path).name+'…')
             self.view.item.setPixmap(QtGui.QPixmap());self.view.source_size=None;self.view.viewport().update()
             self.status.setText('Loading one exposure; the main image and edits are preserved.')
-            self.launch(ReviewWorker([path],self.bayer,full=self.full.isChecked()))
+            self.launch(ReviewWorker([path],self.bayer,full=self.full.isChecked(),auto_stretch=self.stretch_mode.currentIndex()==0))
 
     def start_analysis(self):
         if self.worker is not None:return
@@ -164,7 +176,7 @@ class FrameReviewDialog(W.QDialog):
             self.records=rate_batch(self.records)
             for path,row in self.records.items():self.refresh_row(path,row)
             self.status.setText(('Analysis stopped. ' if cancelled else 'Analysis complete. ')+f'{len(self.records)}/{len(self.paths)} exposures checked. Scores do not remove frames.')
-        for control in (self.preview_button,self.analyze,self.use,self.full):control.setEnabled(True)
+        for control in (self.preview_button,self.analyze,self.use,self.full,self.stretch_mode):control.setEnabled(True)
         self.refresh_best_button();self.cancel.setEnabled(False)
         if self._closing:super().reject()
 
