@@ -74,20 +74,46 @@ def image_summary(data, header):
 
 
 def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
-          report_progress=lambda completed, total, stage: None, gpu=None):
+          report_progress=lambda completed, total, stage: None, gpu=None, rejection='robust', quality=True, normalize_exposure=False):
     if len(paths) < 2:
         raise ValueError('Select at least two individual exposures, or open one finished stack.')
     for path in paths:
         if frame_count(fits.getheader(path)) > 1:
             raise ValueError(f'{Path(path).name} is already stacked. Use Open existing FITS stack.')
+    if rejection not in ('legacy','robust'):raise ValueError('Unknown rejection mode')
+    if rejection=='legacy':quality=False;normalize_exposure=False
     reference, header = read_fits(paths[0], bayer)
+    from frame_quality import measure
+    from stack_quality import quality_weights
+    def exposure(hdr):
+        try:value=float(hdr.get('EXPTIME',hdr.get('EXPOSURE',0)))
+        except (ValueError,TypeError):return 0.
+        return value if np.isfinite(value) and value>0 else 0.
+    reference_exposure=exposure(header)
+    all_exposures=[exposure(fits.getheader(path)) for path in paths]
+    if normalize_exposure and not all(t>0 for t in all_exposures):
+        progress('Exposure normalization disabled: every input needs positive finite exposure metadata.')
+        normalize_exposure=False
+    if not normalize_exposure and len(set(all_exposures))>1:
+        progress('Exposure normalization unavailable/off: mixed exposure levels may reduce rejection reliability.')
+    metrics=[]
+    def metric(data,hdr):
+        if not quality:return None
+        try:
+            hdr=hdr.copy()
+            if normalize_exposure:hdr['EXPTIME']=reference_exposure
+            return measure(data,hdr)
+        except (ValueError,RuntimeError):return None
+
     h, w, _ = reference.shape
     # Explicit disk I/O and bounded staging buffers keep the entire stack out
     # of process RAM even after every aligned frame has been accessed.
     with AlignedFrames(reference.shape) as frames:
         frames.append(reference)
+        metrics.append(metric(reference,header))
         report_progress(1, len(paths), 'Aligning exposures')
-        total_exposure = float(header.get('EXPTIME', header.get('EXPOSURE', 0)))
+        total_exposure = reference_exposure
+        accepted_times=[reference_exposure]
         for i, path in enumerate(paths[1:], 1):
             if cancelled():
                 raise InterruptedError('Cancelled')
@@ -95,12 +121,16 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
             moving, moving_header = read_fits(path, bayer)
             if moving.shape != reference.shape:
                 raise ValueError(f'Image dimensions differ: {Path(path).name}')
+            if normalize_exposure:moving *= reference_exposure/exposure(moving_header)
+            measured=metric(moving,moving_header)
             try:
                 transform, _ = astroalign.find_transform(moving.mean(axis=-1), reference.mean(axis=-1))
                 aligned, footprint = astroalign.apply_transform(transform, moving, reference)
                 aligned[footprint] = np.nan
                 frames.append(aligned)
-                total_exposure += float(moving_header.get('EXPTIME', moving_header.get('EXPOSURE', 0)))
+                metrics.append(measured)
+                total_exposure += exposure(moving_header)
+                accepted_times.append(exposure(moving_header))
                 del aligned, footprint
             except (astroalign.MaxIterError, ValueError, RuntimeError) as exc:
                 progress(f'Skipped {Path(path).name}: {exc}')
@@ -110,10 +140,26 @@ def stack(paths, bayer='Auto', progress=lambda s: None, cancelled=lambda: False,
         if accepted < 2:
             raise ValueError('Could not align a second exposure. Try a sharper reference frame first.')
         del reference
-        output = combine(frames, gpu, progress, cancelled, report_progress)
+        weights=quality_weights(metrics) if quality else None
+        progress(('Robust 4-MAD rejection (at least 8 covered frames)' if rejection=='robust' else 'Legacy 3-sigma rejection')+
+                 ('; quality weights %.2f–%.2f.'%(weights.min(),weights.max()) if weights is not None else '; equal weights.'))
+        if quality:
+            unknown=sum(row is None or row.get('stars',0)<6 for row in metrics)
+            progress(f'Quality weighting: {unknown} frame(s) lack reliable star metrics and keep neutral weight.')
+        output = combine(frames, gpu, progress, cancelled, report_progress,weights=weights,rejection=rejection)
     header['NCOMBINE'] = accepted
     header['TOTALEXP'] = (total_exposure, 'Total accepted exposure time in seconds')
-    header.add_history('Easy Astro Studio: star similarity alignment; 3-sigma clipped mean.')
+    header['EASREJ']=(rejection,'Pixel rejection mode')
+    header['EASWGHT']=(bool(quality),'Relative quality weighting enabled')
+    header['EASNORM']=(bool(normalize_exposure),'Pixels normalized to reference exposure')
+    header['EXPMIN']=(min(accepted_times),'Minimum accepted exposure seconds')
+    header['EXPMAX']=(max(accepted_times),'Maximum accepted exposure seconds')
+    if weights is not None:
+        header['WGHTMIN']=float(weights.min());header['WGHTMAX']=float(weights.max())
+        header['EFFRAMES']=(float(weights.sum()**2/np.sum(weights**2)),'Global effective frame count before pixel rejection')
+    header.add_history('Easy Astro Studio: star similarity alignment; '+rejection+' rejection.')
+    if normalize_exposure:header.add_history('Linear values scaled to reference EXPTIME; TOTALEXP is actual accepted time.')
+    if len(set(accepted_times))>1:header.add_history('Mixed exposure times: EXPTIME describes reference; see EXPMIN/EXPMAX/TOTALEXP.')
     return output, header
 
 

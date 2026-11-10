@@ -245,3 +245,44 @@ preview median display luminance was about 0.666, versus 0.160 in Auto at both
 preview and native resolution. Decoded-pixel hashes and all measured quality
 metrics were identical before and after preview rendering. The user image is
 not included in the repository.
+
+
+## Apple 1.60 — Windows 1.6 processing parity
+
+Ported the shared stacking and sample-background changes from Windows commit
+`b52a3b1b37dd0246446b379008a2a7ea5fa9f19e`, following APPLE_HANDOFF_1_6.md.
+The Apple app and bundle display version is **1.60**. Download artifacts include
+this version. Mac native file panels, sandbox security scopes, coordinated saves,
+Dock reopening, Metal adjustments and the legacy sky slider remain in place.
+
+Step 3 defaults to robust median/MAD rejection with quality weighting on and
+exposure normalization off. Legacy 3-sigma/equal weights remains selectable.
+Preferences persist; controls are disabled while working. Robust rejection needs
+at least eight covered samples; smaller sets use a weighted mean. Quality weights
+are capped at 0.25–4 within comparable groups; unreliable metrics keep weight 1.
+Exposure normalization requires positive finite metadata for every input and
+scales to the reference duration; use calibrated frames. Metadata records rejection,
+weights, normalization, accepted durations, actual total exposure and global
+effective frame count. See STACKING_AUDIT.md for scientific limits.
+
+**Mac stacking and alignment use bounded CPU processing.** Metal still accelerates
+image adjustments; no OpenCL initialization or weighted stacking kernel was copied
+over the Metal backend. The selected rejection/weighting method is preserved.
+
+Step 4 adds Background extraction — choose sky samples. Select clear sky on the
+full original field, review automatic points, and choose a plane or quadratic fit.
+Apply sets Gradient removal to 100%; lower it to reduce the effect. Fits remove
+spatial variation while retaining the constant term. Background neutralization is
+independent. Undo/Redo, projects, reset and crop/restore retain or clear the custom
+fit as appropriate. Older projects use the automatic model.
+
+Background extraction affects preview and rendered TIFF/PNG/JPEG only. Linear
+FITS exports still preserve integrated pixels. Rejection, quality weighting and
+optional exposure normalization affect integrated pixels. This update does not
+add calibrated or preview-matching linear FITS export.
+
+New CPU tests cover rejection, weighted quality, finite coverage, bounded chunks,
+GPU failure fallback, mixed exposures, selected-sky fits, cropping and project
+history. Packaged smoke checks import/process the new modules, exercise robust
+combining and sample fitting, and verify background undo/redo. The macOS workflow
+also runs Metal numerical tests and native sandbox smoke before publishing.

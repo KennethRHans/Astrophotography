@@ -17,6 +17,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Read app version
+        run: |
+          python - <<'PY'
+          import os
+          from app_version import APPLE_VERSION as VERSION
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('APP_VERSION=' + VERSION + '\n')
+          PY
       - run: python -m pip install -r requirements.txt pytest 'pyinstaller>=6.16,<7'
       - name: Compile Metal bridge
         shell: bash
@@ -89,7 +97,12 @@ jobs:
           import subprocess
           from pathlib import Path
           import plistlib
+          from app_version import APPLE_VERSION
           variant = '${{ matrix.variant }}'
+          with Path('dist/EasyAstroStudio.app/Contents/Info.plist').open('rb') as stream:
+              bundle = plistlib.load(stream)
+          assert bundle['CFBundleShortVersionString'] == APPLE_VERSION
+          assert bundle['CFBundleVersion'] == APPLE_VERSION
           command = ['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio', '--smoke-test']
           result = Path('work/macos-smoke.json').resolve()
           result.parent.mkdir(exist_ok=True)
@@ -103,7 +116,7 @@ jobs:
               denied.write_text('sandbox must deny access')
               command += ['--sandbox-probe', str(denied)]
           subprocess.run(command, check=True, timeout=180)
-          result.write_text(json.dumps(dict(ok=True, variant=variant)))
+          result.write_text(json.dumps(dict(ok=True, variant=variant, version=APPLE_VERSION)))
           PY
       - name: Summarize packaged failures
         if: failure()
@@ -126,18 +139,18 @@ jobs:
         if: failure()
         run: echo "See build diagnostics for full logs."
       - name: Archive app preserving bundle permissions
-        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-${{ matrix.variant }}.zip
+        run: ditto -c -k --sequesterRsrc --keepParent dist/EasyAstroStudio.app dist/EasyAstroStudio-macOS-${{ env.APP_VERSION }}-${{ matrix.variant }}.zip
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: EasyAstroStudio-macOS-${{ matrix.variant }}-diagnostics
+          name: EasyAstroStudio-macOS-${{ env.APP_VERSION }}-${{ matrix.variant }}-diagnostics
           path: work/macos-*.log
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
-          name: EasyAstroStudio-macOS-${{ matrix.variant }}
+          name: EasyAstroStudio-macOS-${{ env.APP_VERSION }}-${{ matrix.variant }}
           path: |
-            dist/EasyAstroStudio-macOS-${{ matrix.variant }}.zip
+            dist/EasyAstroStudio-macOS-${{ env.APP_VERSION }}-${{ matrix.variant }}.zip
             work/macos-smoke.json
           if-no-files-found: error

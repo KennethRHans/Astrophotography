@@ -15,7 +15,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
     sys.path.insert(0, str(root))
-    from app_version import VERSION
+    from app_version import APPLE_VERSION as VERSION
     from build_metal import build
     metal_library = build()
     subprocess.run([
