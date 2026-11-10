@@ -39,7 +39,14 @@ metadata improvements remain separate work.
 Local validation: all 114 tests and the application smoke test passed, plus
 focused export/reset/compare regression checks. Synthetic-image live dragging
 still displayed intermediate updates and delivered the latest settings. Windows
-packaged validation is run separately before distributing the installer.
+validation passed: packaged smoke, Store identity installation/activation,
+Program Files, desktop shortcut and upgrade checks all succeeded.
+
+[Download the 1.5.1 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42869030369/artifacts/13789262069).
+Extract and run `installer/EasyAstroStudio-1.5.1-Setup.exe`.
+
+[Download the 1.5.1 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42869030369/artifacts/13789865440).
+Extract and upload `EasyAstroStudio-1.5.1-x64-Store-UNSIGNED.msix` to Partner Center.
 
 ## Midtones, tone curves and protected noise reduction (1.5.0)
 
