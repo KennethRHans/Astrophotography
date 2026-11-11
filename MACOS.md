@@ -286,3 +286,23 @@ GPU failure fallback, mixed exposures, selected-sky fits, cropping and project
 history. Packaged smoke checks import/process the new modules, exercise robust
 combining and sample fitting, and verify background undo/redo. The macOS workflow
 also runs Metal numerical tests and native sandbox smoke before publishing.
+
+
+## App Store distribution preparation
+
+See [APP_STORE_UPLOAD.md](APP_STORE_UPLOAD.md) for the Mac-only signing and upload
+procedure. New sandbox builds include an ICNS icon generated from the existing
+owner-supplied logo and installed dependency license texts/inventory. CI checks
+those resources and publishes a separate local signing kit.
+
+`scripts/package_app_store.py` takes the tested app, a Mac App Store provisioning
+profile and local Keychain application/installer identities. It checks macOS,
+team, bundle, expiry and development-profile flags, signs nested code inside-out,
+embeds the profile and creates a distribution-signed PKG plus SHA-256 report.
+The original app is preserved. It never uploads and needs no uploaded private key.
+The Store version stays 1.60; upload build number is specified separately.
+The Store-only Info.plist marker hides the external Cash App tipping button.
+
+A signed upload artifact cannot be produced in this Linux workspace without
+the owner's Mac distribution credentials. The preparation artifact is not a signed
+PKG. Apple validation, privacy/API declarations and App Review remain pending.

@@ -18,9 +18,12 @@ def main():
     from app_version import APPLE_VERSION as VERSION
     from build_metal import build
     metal_library = build()
+    from macos_release_assets import prepare
+    icon, notices = prepare(root)
     subprocess.run([
         sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--windowed', '--name', 'EasyAstroStudio',
+        '--icon', str(icon), '--add-data', str(notices)+':ThirdPartyNotices',
         '--osx-bundle-identifier', 'com.astrivanta.easyastrostudio',
         '--add-data', 'assets:assets', '--hidden-import', 'sep',
         '--add-data', 'macos/adjustments.metal:macos',
@@ -35,7 +38,7 @@ def main():
     with plist.open('rb') as stream:
         info = plistlib.load(stream)
     info.update(CFBundleShortVersionString=VERSION, CFBundleVersion=VERSION,
-                NSHighResolutionCapable=True)
+                NSHighResolutionCapable=True, LSApplicationCategoryType='public.app-category.photography')
     with plist.open('wb') as stream:
         plistlib.dump(info, stream)
     # Refresh the development signature after editing the bundle metadata.

@@ -103,6 +103,8 @@ jobs:
               bundle = plistlib.load(stream)
           assert bundle['CFBundleShortVersionString'] == APPLE_VERSION
           assert bundle['CFBundleVersion'] == APPLE_VERSION
+          assert (Path('dist/EasyAstroStudio.app/Contents/Resources') / bundle['CFBundleIconFile']).is_file()
+          assert Path('dist/EasyAstroStudio.app/Contents/Resources/ThirdPartyNotices/inventory.json').is_file()
           command = ['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio', '--smoke-test']
           result = Path('work/macos-smoke.json').resolve()
           result.parent.mkdir(exist_ok=True)
@@ -153,4 +155,15 @@ jobs:
           path: |
             dist/EasyAstroStudio-macOS-${{ env.APP_VERSION }}-${{ matrix.variant }}.zip
             work/macos-smoke.json
+          if-no-files-found: error
+
+      - name: Upload local App Store signing kit
+        if: matrix.variant == 'sandbox'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-AppStore-signing-kit-${{ env.APP_VERSION }}
+          path: |
+            APP_STORE_UPLOAD.md
+            app_version.py
+            scripts/package_app_store.py
           if-no-files-found: error

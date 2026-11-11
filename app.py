@@ -322,6 +322,8 @@ class Window(W.QMainWindow):
         self.feedback_button = W.QPushButton('Report a Bug / Suggest a Fix')
         for button in (self.coffee_button,self.feedback_button):
             button.setMinimumHeight(32);buttons.addWidget(button)
+        from macos_distribution import app_store_build
+        self.coffee_button.setVisible(not app_store_build())
         self.coffee_button.setToolTip('Open the developer’s Cash App page in your browser')
         self.coffee_button.clicked.connect(lambda: self.open_community_link(community_links.COFFEE_URL))
         self.feedback_button.setToolTip('Send a bug report or suggestion to the developer')
