@@ -63,6 +63,28 @@ def macho_paths(app):
     return sorted(found, key=lambda p:len(p.parts), reverse=True)
 
 
+def minimum_system_version(app):
+    """Use the highest deployment target in the shipped code; arm64-only needs >=12."""
+    required=(12,0,0)
+    binaries=macho_paths(app)
+    if not binaries:raise ValueError('App contains no Mach-O binaries')
+    for binary in binaries:
+        commands=run('otool','-l',binary).decode()
+        versions=re.findall(r'^\s*minos\s+([0-9]+(?:\.[0-9]+){0,2})\s*$',commands,re.M)
+        versions+=re.findall(r'cmd LC_VERSION_MIN_MACOSX\s+cmdsize \d+\s+version ([0-9]+(?:\.[0-9]+){0,2})',commands)
+        if not versions:raise ValueError('Cannot determine macOS deployment target for '+str(binary))
+        for version in versions:
+            numbers=tuple(int(x) for x in version.split('.'))
+            required=max(required,numbers+(0,)*(3-len(numbers)))
+    return '.'.join(str(x) for x in (required if required[2] else required[:2]))
+
+
+def store_bundle_info(source,build,minimum):
+    return dict(source,CFBundleVersion=build,LSMinimumSystemVersion=minimum,
+                LSApplicationCategoryType='public.app-category.photography',
+                CFBundleDisplayName='Easy Astro Studio',EASMacAppStoreBuild=True)
+
+
 def resolve_app_identity(requested, profile, listing):
     """Choose a valid application identity actually authorized by this profile."""
     allowed={hashlib.sha1(cert).hexdigest().upper() for cert in profile.get('DeveloperCertificates', [])}
@@ -109,13 +131,15 @@ def package(args):
         raise ValueError('Use the tested sandbox app, not the unsandboxed preview')
     if not (app/'Contents/Resources/ThirdPartyNotices/inventory.json').is_file():
         raise ValueError('App is missing bundled dependency notices; use the latest preparation build')
+    minimum=minimum_system_version(app)
+    print('Application signing fingerprint: '+app_identity,flush=True)
+    print('Required macOS version: '+minimum,flush=True)
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='eas-app-store-') as folder:
         temp=Path(folder); staged=temp/app.name
         run('ditto',app,staged)
         shutil.copy2(args.profile,staged/'Contents/embedded.provisionprofile')
-        info=dict(source_info,CFBundleVersion=args.build_number,LSApplicationCategoryType='public.app-category.photography',
-                  CFBundleDisplayName='Easy Astro Studio',EASMacAppStoreBuild=True)
+        info=store_bundle_info(source_info,args.build_number,minimum)
         (staged/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
         entpath=temp/'distribution.entitlements';entpath.write_bytes(plistlib.dumps(entitlements))
         # Sign from the inside out; do not use codesign --deep to sign.
@@ -136,7 +160,7 @@ def package(args):
         # Publish the completed local result only after validation succeeds.
         shutil.copy2(candidate,output)
     report=dict(version=APPLE_VERSION,build=args.build_number,bundle_id=BUNDLE,team_id=TEAM,
-                apple_id='6832157430',sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
+                apple_id='6832157430',minimum_macos=minimum,application_certificate_sha1=app_identity,sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
                 status='Distribution-signed locally; Apple upload validation and review pending')
     output.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))

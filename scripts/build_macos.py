@@ -37,7 +37,9 @@ def main():
     plist = root / 'dist/EasyAstroStudio.app/Contents/Info.plist'
     with plist.open('rb') as stream:
         info = plistlib.load(stream)
-    info.update(CFBundleShortVersionString=VERSION, CFBundleVersion=VERSION,
+    from package_app_store import minimum_system_version
+    minimum=minimum_system_version(plist.parents[1])
+    info.update(CFBundleShortVersionString=VERSION, CFBundleVersion=VERSION, LSMinimumSystemVersion=minimum,
                 NSHighResolutionCapable=True, LSApplicationCategoryType='public.app-category.photography')
     with plist.open('wb') as stream:
         plistlib.dump(info, stream)

@@ -81,3 +81,26 @@ def test_duplicate_names_resolve_to_profile_authorized_fingerprint():
     p['DeveloperCertificates']=[chosen,other]
     with pytest.raises(ValueError):release.resolve_app_identity(name,p,listing)
     assert release.resolve_app_identity(chosen_hash,p,listing)==chosen_hash
+
+
+def test_minimum_macos_matches_highest_shipped_deployment_target(tmp_path,monkeypatch):
+    a=tmp_path/'a';b=tmp_path/'b'
+    monkeypatch.setattr(release,'macho_paths',lambda app:[a,b])
+    commands={a:b'cmd LC_BUILD_VERSION\n cmdsize 32\n platform 1\n minos 14.0\n sdk 26.0\n',
+              b:b'cmd LC_VERSION_MIN_MACOSX\n cmdsize 16\n version 15.2\n sdk 26.0\n'}
+    monkeypatch.setattr(release,'run',lambda *args:commands[args[-1]])
+    assert release.minimum_system_version(tmp_path)=='15.2'
+    commands[a]=b' minos 11.0\n';commands[b]=b' minos 10.15\n'
+    assert release.minimum_system_version(tmp_path)=='12.0'
+    commands[b]=b' minos 14.1.2\n'
+    assert release.minimum_system_version(tmp_path)=='14.1.2'
+    commands[b]=b' sdk 26.0\n'
+    with pytest.raises(ValueError,match='deployment target'):release.minimum_system_version(tmp_path)
+
+
+def test_store_metadata_includes_deployment_target_before_signing():
+    source={'CFBundleIdentifier':release.BUNDLE,'CFBundleShortVersionString':'1.60'}
+    info=release.store_bundle_info(source,'2','14.0')
+    assert info['LSMinimumSystemVersion']=='14.0' and info['CFBundleVersion']=='2'
+    assert info['CFBundleShortVersionString']=='1.60' and info['EASMacAppStoreBuild']
+    assert 'LSMinimumSystemVersion' not in source

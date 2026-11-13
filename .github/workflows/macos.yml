@@ -103,6 +103,7 @@ jobs:
               bundle = plistlib.load(stream)
           assert bundle['CFBundleShortVersionString'] == APPLE_VERSION
           assert bundle['CFBundleVersion'] == APPLE_VERSION
+          assert tuple(int(n) for n in bundle['LSMinimumSystemVersion'].split('.')) >= (12, 0)
           assert (Path('dist/EasyAstroStudio.app/Contents/Resources') / bundle['CFBundleIconFile']).is_file()
           assert Path('dist/EasyAstroStudio.app/Contents/Resources/ThirdPartyNotices/inventory.json').is_file()
           command = ['dist/EasyAstroStudio.app/Contents/MacOS/EasyAstroStudio', '--smoke-test']

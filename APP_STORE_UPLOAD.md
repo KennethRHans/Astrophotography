@@ -124,3 +124,27 @@ the packaging command to restrict both application and installer signing to logi
 Keep your certificate/private key pairs. There is no need to delete them to fix
 name ambiguity. If the profile authorizes no installed valid certificate, generate
 a replacement profile selecting the installed application distribution certificate.
+
+## Transporter: revoked certificate and deployment-target errors
+
+Apple may report hundreds of repeated errors when one certificate is revoked.
+A local `security find-identity` listing is not proof of current Apple revocation
+status. In Apple Developer → Certificates, select an active Mac App Distribution
+certificate with an installed private key, or create/install a new one. Regenerate
+the Mac App Store provisioning profile selecting that certificate, download it and
+replace the profile passed to the tool. Do not revoke other certificates merely
+to resolve duplicate names. The installer certificate need not be replaced unless
+Apple flags it too. Re-sign the original sandbox app; do not re-upload the old PKG.
+
+The updated tool sets `LSMinimumSystemVersion` on the copied app before signing.
+It inspects every bundled Mach-O load command and takes the highest deployment
+target, with a floor of macOS 12.0 for Apple Silicon-only Store submissions. This
+can yield a higher minimum than 12.0 depending on Python, Qt and native libraries.
+It records the minimum and chosen signing fingerprint in the JSON report.
+The same metadata is now populated in future preview/sandbox builds. Existing
+sandbox downloads can be repackaged with the updated script; no app download is
+needed to correct these metadata fields.
+
+Use a new output path and build number (for example build 2) for the corrected
+package. Local signature success still does not establish Apple acceptance.
+Transporter can reveal additional errors after the revoked-signature errors clear.
