@@ -100,6 +100,19 @@ def resolve_app_identity(requested, profile, listing):
     return candidates.pop()
 
 
+def resolve_installer_identity(requested,listing):
+    """Require a unique installer identity of this team; hashes avoid duplicate names."""
+    candidates=set()
+    for digest,name in re.findall(r'([0-9A-Fa-f]{40}) "([^"\n]+)"',listing):
+        digest=digest.upper()
+        if f'({TEAM})' not in name or not name.startswith('3rd Party Mac Developer Installer:'):continue
+        if requested==name or requested.upper()==digest:candidates.add(digest)
+    if len(candidates)!=1:
+        raise ValueError('Need exactly one installer identity for this team. '
+                         'Use the active installer certificate SHA-1 fingerprint with --installer-identity.')
+    return candidates.pop()
+
+
 def package(args):
     if sys.platform != 'darwin':
         raise ValueError('Distribution signing requires macOS and local Apple certificates')
@@ -107,11 +120,12 @@ def package(args):
     if not app.is_dir() or app.suffix != '.app':raise ValueError('Select the tested EasyAstroStudio.app')
     if output.exists() or output.with_suffix('.json').exists():raise ValueError('Output already exists; choose a new package path')
     app_hash=bool(re.fullmatch(r'[0-9A-Fa-f]{40}',args.app_identity))
-    if (not app_hash and f'({TEAM})' not in args.app_identity) or f'({TEAM})' not in args.installer_identity:
+    installer_hash=bool(re.fullmatch(r'[0-9A-Fa-f]{40}',args.installer_identity))
+    if (not app_hash and f'({TEAM})' not in args.app_identity) or (not installer_hash and f'({TEAM})' not in args.installer_identity):
         raise ValueError('Both certificate identity names must end with the correct Team ID')
     if not app_hash and not args.app_identity.startswith(('3rd Party Mac Developer Application:', 'Apple Distribution:')):
         raise ValueError('Select a Mac App Distribution application certificate')
-    if not args.installer_identity.startswith('3rd Party Mac Developer Installer:'):
+    if not installer_hash and not args.installer_identity.startswith('3rd Party Mac Developer Installer:'):
         raise ValueError('Select a Mac Installer Distribution certificate')
     profile=plistlib.loads(run('security','cms','-D','-i',args.profile.resolve()))
     root=Path(__file__).resolve().parents[1]
@@ -121,6 +135,8 @@ def package(args):
     keychain=['--keychain',str(args.keychain.expanduser().resolve())] if args.keychain else []
     listing=run('security','find-identity','-v','-p','codesigning',*([keychain[1]] if keychain else [])).decode()
     app_identity=resolve_app_identity(args.app_identity,profile,listing)
+    installer_listing=run('security','find-identity','-v','-p','basic',*([keychain[1]] if keychain else [])).decode()
+    installer_identity=resolve_installer_identity(args.installer_identity,installer_listing)
     source_info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if source_info.get('CFBundleIdentifier') != BUNDLE or source_info.get('CFBundleShortVersionString') != APPLE_VERSION:
         raise ValueError('App bundle identifier/version does not match this release kit')
@@ -154,13 +170,13 @@ def package(args):
         for key in ('com.apple.application-identifier','com.apple.developer.team-identifier','com.apple.security.app-sandbox'):
             if signed.get(key) != entitlements[key]:raise ValueError('Signed entitlement mismatch: '+key)
         candidate=temp/'EasyAstroStudio.pkg'
-        run('productbuild','--component',staged,'/Applications','--sign',args.installer_identity,*keychain,candidate)
+        run('productbuild','--component',staged,'/Applications','--sign',installer_identity,*keychain,candidate)
         signature=run('pkgutil','--check-signature',candidate).decode()
         if TEAM not in signature:raise ValueError('Installer signature does not match the Apple team')
         # Publish the completed local result only after validation succeeds.
         shutil.copy2(candidate,output)
     report=dict(version=APPLE_VERSION,build=args.build_number,bundle_id=BUNDLE,team_id=TEAM,
-                apple_id='6832157430',minimum_macos=minimum,application_certificate_sha1=app_identity,sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
+                apple_id='6832157430',minimum_macos=minimum,application_certificate_sha1=app_identity,installer_certificate_sha1=installer_identity,sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
                 status='Distribution-signed locally; Apple upload validation and review pending')
     output.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))

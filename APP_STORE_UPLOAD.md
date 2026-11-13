@@ -148,3 +148,10 @@ needed to correct these metadata fields.
 Use a new output path and build number (for example build 2) for the corrected
 package. Local signature success still does not establish Apple acceptance.
 Transporter can reveal additional errors after the revoked-signature errors clear.
+
+Installer signing also supports `--installer-identity` as a SHA-1 fingerprint.
+When multiple installer certificates have the same name, explicitly select the
+active certificate confirmed in Apple Developer. The tool validates the selected
+identity's certificate type/team and refuses ambiguous names before signing. It
+records the chosen installer fingerprint in the JSON. Local identity discovery
+does not establish online revocation status.

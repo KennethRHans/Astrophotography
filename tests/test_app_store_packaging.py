@@ -104,3 +104,14 @@ def test_store_metadata_includes_deployment_target_before_signing():
     assert info['LSMinimumSystemVersion']=='14.0' and info['CFBundleVersion']=='2'
     assert info['CFBundleShortVersionString']=='1.60' and info['EASMacAppStoreBuild']
     assert 'LSMinimumSystemVersion' not in source
+
+
+def test_installer_duplicate_names_require_explicit_hash_and_correct_team():
+    name='3rd Party Mac Developer Installer: Kenneth Hans ('+release.TEAM+')'
+    a='73945653EA85FD5429E955CDC2B63FE4A59F7B4C';b='E91D11A2FC2299B6FE392B2FAC46892B6B3B37A2'
+    listing=f'1) {a} "{name}"\n2) {b} "{name}"\n3) {b} "{name}"'
+    with pytest.raises(ValueError):release.resolve_installer_identity(name,listing)
+    assert release.resolve_installer_identity(b.lower(),listing)==b
+    assert release.resolve_installer_identity(name,f'1) {b} "{name}"')==b
+    for other in (name.replace(release.TEAM,'OTHER'),name.replace('Installer','Application')):
+        with pytest.raises(ValueError):release.resolve_installer_identity(b,f'1) {b} "{other}"')
