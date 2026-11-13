@@ -66,3 +66,18 @@ def test_store_build_omits_external_tipping_control(tmp_path,monkeypatch):
     assert window.coffee_button.isHidden()
     assert not window.feedback_button.isHidden()
     window.close();settle(app,window)
+
+
+def test_duplicate_names_resolve_to_profile_authorized_fingerprint():
+    import hashlib
+    chosen=b'profile-authorized-cert';other=b'other-cert'
+    chosen_hash=hashlib.sha1(chosen).hexdigest().upper();other_hash=hashlib.sha1(other).hexdigest().upper()
+    name='3rd Party Mac Developer Application: Kenneth Hans ('+release.TEAM+')'
+    listing=f'1) {other_hash} "{name}"\n2) {chosen_hash} "{name}"\n3) {chosen_hash} "{name}"'
+    p=profile();p['DeveloperCertificates']=[chosen]
+    assert release.resolve_app_identity(name,p,listing)==chosen_hash
+    assert release.resolve_app_identity(chosen_hash.lower(),p,listing)==chosen_hash
+    with pytest.raises(ValueError):release.resolve_app_identity(other_hash,p,listing)
+    p['DeveloperCertificates']=[chosen,other]
+    with pytest.raises(ValueError):release.resolve_app_identity(name,p,listing)
+    assert release.resolve_app_identity(chosen_hash,p,listing)==chosen_hash

@@ -63,15 +63,31 @@ def macho_paths(app):
     return sorted(found, key=lambda p:len(p.parts), reverse=True)
 
 
+def resolve_app_identity(requested, profile, listing):
+    """Choose a valid application identity actually authorized by this profile."""
+    allowed={hashlib.sha1(cert).hexdigest().upper() for cert in profile.get('DeveloperCertificates', [])}
+    candidates=set()
+    for digest,name in re.findall(r'([0-9A-Fa-f]{40}) "([^"\n]+)"',listing):
+        digest=digest.upper()
+        if digest not in allowed:continue
+        if f'({TEAM})' not in name or not name.startswith(('3rd Party Mac Developer Application:', 'Apple Distribution:')):continue
+        if requested==name or requested.upper()==digest:candidates.add(digest)
+    if len(candidates)!=1:
+        raise ValueError('Need exactly one valid application identity authorized by the provisioning profile. '
+                         'Select its SHA-1 fingerprint with --app-identity, or regenerate the profile for the installed certificate.')
+    return candidates.pop()
+
+
 def package(args):
     if sys.platform != 'darwin':
         raise ValueError('Distribution signing requires macOS and local Apple certificates')
     app=args.app.resolve(); output=args.output.resolve()
     if not app.is_dir() or app.suffix != '.app':raise ValueError('Select the tested EasyAstroStudio.app')
     if output.exists() or output.with_suffix('.json').exists():raise ValueError('Output already exists; choose a new package path')
-    if f'({TEAM})' not in args.app_identity or f'({TEAM})' not in args.installer_identity:
+    app_hash=bool(re.fullmatch(r'[0-9A-Fa-f]{40}',args.app_identity))
+    if (not app_hash and f'({TEAM})' not in args.app_identity) or f'({TEAM})' not in args.installer_identity:
         raise ValueError('Both certificate identity names must end with the correct Team ID')
-    if not args.app_identity.startswith(('3rd Party Mac Developer Application:', 'Apple Distribution:')):
+    if not app_hash and not args.app_identity.startswith(('3rd Party Mac Developer Application:', 'Apple Distribution:')):
         raise ValueError('Select a Mac App Distribution application certificate')
     if not args.installer_identity.startswith('3rd Party Mac Developer Installer:'):
         raise ValueError('Select a Mac Installer Distribution certificate')
@@ -80,6 +96,9 @@ def package(args):
     sys.path.insert(0,str(root))
     from app_version import APPLE_VERSION
     entitlements=validate_profile(profile, APPLE_VERSION, args.build_number)
+    keychain=['--keychain',str(args.keychain.expanduser().resolve())] if args.keychain else []
+    listing=run('security','find-identity','-v','-p','codesigning',*([keychain[1]] if keychain else [])).decode()
+    app_identity=resolve_app_identity(args.app_identity,profile,listing)
     source_info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
     if source_info.get('CFBundleIdentifier') != BUNDLE or source_info.get('CFBundleShortVersionString') != APPLE_VERSION:
         raise ValueError('App bundle identifier/version does not match this release kit')
@@ -101,17 +120,17 @@ def package(args):
         entpath=temp/'distribution.entitlements';entpath.write_bytes(plistlib.dumps(entitlements))
         # Sign from the inside out; do not use codesign --deep to sign.
         for path in macho_paths(staged):
-            run('codesign','--force','--sign',args.app_identity,'--timestamp=none',path)
+            run('codesign','--force','--sign',app_identity,*keychain,'--timestamp=none',path)
         containers=[p for p in staged.rglob('*') if p.is_dir() and not p.is_symlink() and p.suffix in ('.framework','.bundle','.app','.xpc')]
         for path in sorted(containers,key=lambda p:len(p.parts),reverse=True):
-            run('codesign','--force','--sign',args.app_identity,'--timestamp=none',path)
-        run('codesign','--force','--sign',args.app_identity,'--timestamp=none','--entitlements',entpath,staged)
+            run('codesign','--force','--sign',app_identity,*keychain,'--timestamp=none',path)
+        run('codesign','--force','--sign',app_identity,*keychain,'--timestamp=none','--entitlements',entpath,staged)
         run('codesign','--verify','--deep','--strict',staged)
         signed=plistlib.loads(run('codesign','-d','--entitlements',':-',staged))
         for key in ('com.apple.application-identifier','com.apple.developer.team-identifier','com.apple.security.app-sandbox'):
             if signed.get(key) != entitlements[key]:raise ValueError('Signed entitlement mismatch: '+key)
         candidate=temp/'EasyAstroStudio.pkg'
-        run('productbuild','--component',staged,'/Applications','--sign',args.installer_identity,candidate)
+        run('productbuild','--component',staged,'/Applications','--sign',args.installer_identity,*keychain,candidate)
         signature=run('pkgutil','--check-signature',candidate).decode()
         if TEAM not in signature:raise ValueError('Installer signature does not match the Apple team')
         # Publish the completed local result only after validation succeeds.
@@ -131,6 +150,7 @@ def main():
     parser.add_argument('--profile',type=Path,required=True)
     parser.add_argument('--app-identity',required=True)
     parser.add_argument('--installer-identity',required=True)
+    parser.add_argument('--keychain',type=Path,help='Restrict identity lookup and signing to one Keychain')
     parser.add_argument('--build-number',required=True)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()

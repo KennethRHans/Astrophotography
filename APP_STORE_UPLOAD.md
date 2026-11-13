@@ -106,3 +106,21 @@ purchases or change processing. Bundled notices provide installed dependency
 license texts/inventory; review Qt LGPL compliance and other redistribution
 obligations before public release. Native document-type opening/association is
 not added by this packaging step.
+
+## Duplicate certificate names / ambiguous identity
+
+The updated tool resolves the application identity to its SHA-1 fingerprint and
+requires that certificate to be authorized by the provisioning profile. You can
+also supply the exact fingerprint as `--app-identity`. This avoids choosing the
+wrong certificate when different certificates have identical display names.
+
+If duplicate names exist in System and login Keychains, append the following to
+the packaging command to restrict both application and installer signing to login:
+
+```sh
+--keychain "$HOME/Library/Keychains/login.keychain-db"
+```
+
+Keep your certificate/private key pairs. There is no need to delete them to fix
+name ambiguity. If the profile authorizes no installed valid certificate, generate
+a replacement profile selecting the installed application distribution certificate.
