@@ -115,3 +115,14 @@ def test_installer_duplicate_names_require_explicit_hash_and_correct_team():
     assert release.resolve_installer_identity(name,f'1) {b} "{name}"')==b
     for other in (name.replace(release.TEAM,'OTHER'),name.replace('Installer','Application')):
         with pytest.raises(ValueError):release.resolve_installer_identity(b,f'1) {b} "{other}"')
+
+
+def test_staged_quarantine_cleanup_and_final_guard(tmp_path,monkeypatch):
+    calls=[]
+    def clean(*args):calls.append(args);return b''
+    monkeypatch.setattr(release,'run',clean)
+    release.clear_download_attributes(tmp_path)
+    release.verify_no_quarantine(tmp_path)
+    assert calls==[('xattr','-cr',tmp_path),('xattr','-r',tmp_path)]
+    monkeypatch.setattr(release,'run',lambda *args:b'app/Contents/_CodeSignature/CodeResources: com.apple.quarantine\n')
+    with pytest.raises(ValueError,match='quarantine'):release.verify_no_quarantine(tmp_path)

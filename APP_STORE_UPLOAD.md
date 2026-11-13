@@ -155,3 +155,13 @@ active certificate confirmed in Apple Developer. The tool validates the selected
 identity's certificate type/team and refuses ambiguous names before signing. It
 records the chosen installer fingerprint in the JSON. Local identity discovery
 does not establish online revocation status.
+
+## Transporter error 91109: quarantine attributes
+
+Downloaded/extracted apps can carry `com.apple.quarantine`, including on their
+signature resource files. The updated tool recursively clears extended attributes
+on its temporary app copy after copying the profile and before signing. It checks
+for quarantine again after signing and before productbuild, and refuses to package
+if any remains. Source downloads, profiles and original app files are left intact.
+Use a new build number/output path for the corrected upload. Do not modify the
+previous signed PKG; regenerate it with the updated tool.

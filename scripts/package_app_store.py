@@ -63,6 +63,17 @@ def macho_paths(app):
     return sorted(found, key=lambda p:len(p.parts), reverse=True)
 
 
+def clear_download_attributes(app):
+    """Sanitize only the staged app, before signing; retain the source download."""
+    run('xattr','-cr',app)
+
+
+def verify_no_quarantine(app):
+    attributes=run('xattr','-r',app).decode(errors='replace')
+    if 'com.apple.quarantine' in attributes:
+        raise ValueError('Staged app still contains quarantine attributes; refusing to package')
+
+
 def minimum_system_version(app):
     """Use the highest deployment target in the shipped code; arm64-only needs >=12."""
     required=(12,0,0)
@@ -157,6 +168,7 @@ def package(args):
         shutil.copy2(args.profile,staged/'Contents/embedded.provisionprofile')
         info=store_bundle_info(source_info,args.build_number,minimum)
         (staged/'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+        clear_download_attributes(staged)
         entpath=temp/'distribution.entitlements';entpath.write_bytes(plistlib.dumps(entitlements))
         # Sign from the inside out; do not use codesign --deep to sign.
         for path in macho_paths(staged):
@@ -169,6 +181,7 @@ def package(args):
         signed=plistlib.loads(run('codesign','-d','--entitlements',':-',staged))
         for key in ('com.apple.application-identifier','com.apple.developer.team-identifier','com.apple.security.app-sandbox'):
             if signed.get(key) != entitlements[key]:raise ValueError('Signed entitlement mismatch: '+key)
+        verify_no_quarantine(staged)
         candidate=temp/'EasyAstroStudio.pkg'
         run('productbuild','--component',staged,'/Applications','--sign',installer_identity,*keychain,candidate)
         signature=run('pkgutil','--check-signature',candidate).decode()
