@@ -96,7 +96,7 @@ def test_gaia_matches_survive_project_roundtrip(tmp_path):
 def test_bundled_privacy_policy_matches_public_text_and_opens_without_browser(tmp_path,monkeypatch):
     app,w=app_and_window(tmp_path);opened=[]
     monkeypatch.setattr(QtGui.QDesktopServices,'openUrl',lambda url:opened.append(url.toString()) or True)
-    d=PrivacyDialog(w);assert d.policy_text==Path('PRIVACY.md').read_text()
+    d=PrivacyDialog(w);assert d.policy_text==Path('PRIVACY.md').read_text(encoding='utf-8')
     assert 'Optional Gaia star matching' in d.browser.toPlainText() and not opened
     d.reject();w.close()
 

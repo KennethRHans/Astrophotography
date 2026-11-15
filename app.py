@@ -365,7 +365,7 @@ class Window(W.QMainWindow):
             self.reference_dock=W.QDockWidget('Object Reference',self);self.reference_dock.setWidget(self.reference_panel)
             self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.reference_dock)
             self.tabifyDockWidget(self.labels_dock,self.reference_dock)
-            self.reference_dock.visibilityChanged.connect(lambda visible:self.reference_panel.cancel() if not visible else None)
+            self.reference_dock.visibilityChanged.connect(lambda visible:self.reference_panel.cancel() if not visible and self.reference_panel is not None else None)
             self.reference_panel.set_theme(dict(THEMES[self.theme_name],light=self.theme_name=='Light'))
             self.refresh_reference_context()
         elif self.reference_dock.isVisible():
@@ -388,6 +388,7 @@ class Window(W.QMainWindow):
             '<p>Align and stack FITS exposures, adjust and crop images, identify and label catalog objects, and export FITS, TIFF, PNG or JPEG.</p>'
             '<p>Catalog data: OpenNGC (Mattia Verga and contributors) and HYG v4.1 (David Nash / Astronomy Nexus and contributors), CC BY-SA 4.0. Full attribution and license are bundled in assets/catalogs.</p>'
             '<p>Gaia matching uses ESA Gaia DR3 and DPAC data. Candidate matches require an existing sky solution.</p>'
+            '<p>Object Reference uses bundled Aladin Lite 3.8.2 (CDS), LGPL v3, with source and license notices in assets/reference. Survey: DSS / STScI / NASA / CDS. Mirror and image credits appear in the reference panel.</p>'
             '<p>Privacy contact: starsandfits@gmail.com</p>')
         box.setStandardButtons(W.QMessageBox.Ok);privacy=box.addButton('Privacy Policy',W.QMessageBox.ActionRole);privacy.clicked.connect(lambda:show_privacy(box))
         try:box.exec()

@@ -18,6 +18,7 @@ def javascript(panel,app,source):
     return json.loads(result[0])
 
 def smoke_reference(window,app):
+    signature=window.project_signature();source=window.original_linear.copy()
     window.toggle_reference();panel=window.reference_panel
     wait_for(app,lambda:panel.ready)
     assert not panel.guard.enabled,'Reference requested network access without consent'
@@ -40,4 +41,12 @@ def smoke_reference(window,app):
     assert result,'Saved reference did not load offline'
     assert not panel.guard.enabled
     panel.set_theme(dict(bg='#fff',fg='#000',panel='#eee',button='#ddd',border='#888',muted='#444',link='#00f',base='#fff',light=True))
-    panel.cancel();window.reference_dock.hide()
+    generation=javascript(panel,app,'refGeneration')
+    javascript(panel,app,"(()=>{colorCancel=()=>{window.cancelledSyntheticRequest=true};return true})()")
+    panel.cancel()
+    assert javascript(panel,app,'Boolean(window.cancelledSyntheticRequest)')
+    assert javascript(panel,app,'refGeneration')>generation
+    window.reference_dock.hide()
+    import numpy as np
+    assert window.project_signature()==signature,'Reference changed the editing/project state'
+    assert np.array_equal(window.original_linear,source),'Reference changed processing pixels'
