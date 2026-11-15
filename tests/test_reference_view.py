@@ -30,3 +30,25 @@ def test_catalog_aliases_suggest_without_network():
         context=reference_context(fits.Header({'OBJECT':name}),(100,100,3))
         assert abs(context['ra']-ra)<.01
         assert 'object name' in context['hint']
+
+def test_toolbar_switches_tabbed_panels_in_one_click(tmp_path,monkeypatch):
+    import app as application
+    from PySide6 import QtCore,QtWidgets as W
+    from tests.test_session_updates import app_and_window
+    class LocalPanel(W.QWidget):
+        contextRequested=QtCore.Signal()
+        def set_context(self,*args):pass
+        def set_theme(self,*args):pass
+        def cancel(self):pass
+        def shutdown(self):pass
+    monkeypatch.setattr(application,'ReferencePanel',LocalPanel)
+    qt,window=app_and_window(tmp_path);window.show();qt.processEvents()
+    window.toggle_reference();qt.processEvents()
+    assert not window.reference_panel.visibleRegion().isEmpty()
+    window.toggle_labels();qt.processEvents()
+    assert not window.labels_panel.visibleRegion().isEmpty()
+    window.toggle_reference();qt.processEvents()
+    assert not window.reference_panel.visibleRegion().isEmpty()
+    window.toggle_labels();qt.processEvents()
+    assert not window.labels_panel.visibleRegion().isEmpty()
+    window.close()

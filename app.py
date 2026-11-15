@@ -306,7 +306,7 @@ class Window(W.QMainWindow):
         self.reference_action=QtGui.QAction('Object Reference…',self);self.reference_action.setToolTip('Compare with a survey or local reference without changing your image');toolbar.addAction(self.reference_action);self.reference_action.triggered.connect(self.toggle_reference)
         self.labels_action=QtGui.QAction('Labels && Objects…',self);self.labels_action.setToolTip('Open an image to add labels');toolbar.addAction(self.labels_action)
         self.labels_panel=LabelsPanel();self.labels_dock=W.QDockWidget('Labels && Objects',self);self.labels_dock.setWidget(self.labels_panel);self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.labels_dock);self.labels_dock.hide()
-        self.labels_action.triggered.connect(lambda:self.labels_dock.setVisible(not self.labels_dock.isVisible()))
+        self.labels_action.triggered.connect(self.toggle_labels)
         self.labels_panel.identify.connect(self.identify_objects)
         self.labels_panel.place.connect(self.begin_label);self.preview.annotationPlaced.connect(self.place_label)
         self.labels_panel.changed.connect(self.edit_label);self.labels_panel.remove.connect(self.remove_label);self.labels_panel.clear.connect(self.clear_labels)
@@ -358,6 +358,12 @@ class Window(W.QMainWindow):
         if self.reference_panel is not None:self.reference_panel.set_theme(dict(THEMES[self.theme_name],light=self.theme_name=='Light'))
         if hasattr(self,'_clipping_warning'):self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
 
+    def toggle_labels(self):
+        if self.labels_dock.isVisible() and not self.labels_panel.visibleRegion().isEmpty():
+            self.labels_dock.hide()
+        else:
+            self.labels_dock.show();self.labels_dock.raise_()
+
     def toggle_reference(self):
         if self.reference_panel is None:
             self.reference_panel=ReferencePanel(self)
@@ -368,7 +374,7 @@ class Window(W.QMainWindow):
             self.reference_dock.visibilityChanged.connect(lambda visible:self.reference_panel.cancel() if not visible and self.reference_panel is not None else None)
             self.reference_panel.set_theme(dict(THEMES[self.theme_name],light=self.theme_name=='Light'))
             self.refresh_reference_context()
-        elif self.reference_dock.isVisible():
+        elif self.reference_dock.isVisible() and not self.reference_panel.visibleRegion().isEmpty():
             self.reference_dock.hide();return
         self.reference_dock.show();self.reference_dock.raise_()
         self.resizeDocks([self.reference_dock],[440],QtCore.Qt.Horizontal)
