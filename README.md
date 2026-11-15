@@ -4,6 +4,8 @@ A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
 
+[Download the 1.7.0 installer-only ZIP (248 MB)](https://github.com/KennethRHans/Astrophotography/actions/runs/43744566720/artifacts/14173791474).
+
 [Download the 1.7.0 Windows installer and portable bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/43742762788/artifacts/14173289465).
 
 [Download the 1.7.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/43742762788/artifacts/14173183816).
