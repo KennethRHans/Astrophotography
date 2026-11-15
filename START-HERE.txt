@@ -8,8 +8,8 @@ in Edge or Chrome. A WebGL2-capable browser is needed for color rendering.
    These browser sliders test the layout, not the Windows processing algorithms.
 2. Check the selected object, coordinates and field width on the right.
 3. Leave DSS color — automatic mirror fallback selected, check online consent,
-   and click Load online reference. The first color load downloads the pinned
-   Aladin Lite renderer from jsDelivr (roughly 2.3 MB), then public survey tiles.
+   and click Load online reference. The Aladin Lite 3.8.2 renderer is bundled locally; only public survey
+   tiles are downloaded.
 4. Automatic mode tries the SAME DSS color survey at MAST, CSIRO, China-VO,
    then ESA. Loading status names the active source. Cancel stops the local
    renderer and prevents subsequent mirror attempts. Requests already sent
@@ -26,10 +26,9 @@ in Edge or Chrome. A WebGL2-capable browser is needed for color rendering.
    are never uploaded and are never added to the saved-online-reference cache.
 
 Privacy and limits
-Only public sky coordinates/field width enter the sandboxed renderer, not your
-image, filename, FITS header or API keys. The renderer is loaded only after the
-online consent and Load action. Color requests go to jsDelivr and the selected
-mirror(s), including ESA's CDN if redirected. If enabled, NASA is tried after
+Only public sky coordinates/field width are passed to the dedicated renderer, not your
+image, filename, FITS header or API keys. The bundled renderer starts only after the
+online consent and Load action. Color requests go to the selected mirror(s), including ESA's CDN if redirected. If enabled, NASA is tried after
 color failure. There is no background search or analytics; renderer logging is
 disabled. Browser HTTP caching is separate from the five-image saved cache.
 

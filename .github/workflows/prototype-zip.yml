@@ -16,7 +16,9 @@ jobs:
         run: |
           python -m pip install pillow
           python check_services.py
-      - name: Browser regression and live NASA image check
+      - name: Bundle pinned renderer and corresponding source
+        run: python prepare_renderer.py
+      - name: Browser regression and live color/NASA image checks
         env:
           TEST_LIVE_REFERENCE: '1'
           REFERENCE_SCREENSHOT: Reference-View-Preview.png
@@ -44,4 +46,6 @@ jobs:
             START-HERE.txt
             README.md
             THIRD-PARTY-NOTICES.txt
+            pack_renderer.py
+            vendor/
           if-no-files-found: error
