@@ -147,7 +147,7 @@ async function tileWorker(config){
  try{
   let moduleUrl=config.library;let ownedUrl=null;if(config.moduleBase64){const binary=atob(config.moduleBase64);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);ownedUrl=URL.createObjectURL(new Blob([bytes],{type:'text/javascript'}));moduleUrl=ownedUrl;}
   const {default:A}=await import(moduleUrl);if(ownedUrl)URL.revokeObjectURL(ownedUrl);emit('progress',{detail:'Renderer library loaded'});await Promise.race([A.init,new Promise((_,reject)=>setTimeout(()=>reject(Error('WebAssembly initialization timed out')),10000))]);emit('progress',{detail:'WebGL renderer ready'});
-  const survey=A.HiPS(config.base,{name:'DSS2 color — '+config.name,cooFrame:'ICRS',maxOrder:9,tileSize:512,imgFormat:'jpeg',requestCredentials:'omit',errorCallback:e=>emit('error',{detail:'Survey setup failed: '+String(e).slice(0,180)}),successCallback:()=>emit('progress',{detail:'Mirror survey ready'})});
+  const survey=A.HiPS(config.base,{name:'DSS2 color — '+config.name,imgFormat:'jpeg',requestCredentials:'omit',errorCallback:e=>emit('error',{detail:'Survey setup failed: '+String(e).slice(0,180)}),successCallback:()=>emit('progress',{detail:'Mirror survey ready'})});
   const aladin=A.aladin('#sky',{survey,mode:'dark',target:[config.ra,config.dec],fov:config.fov,projection:'TAN',cooFrame:'ICRS',showReticle:false,showZoomControl:false,showFullscreenControl:false,showLayersControl:false,showGotoControl:false,showShareControl:false,showSimbadPointerControl:false,showCooGridControl:false,showSettingsControl:false,showContextMenu:false,showStatusBar:false,log:false});
   const deadline=performance.now()+21000;
   while(performance.now()<deadline){
