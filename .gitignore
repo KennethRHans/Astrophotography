@@ -17,3 +17,7 @@ msix-artifacts/
 *.cer
 *.msix
 store/identity.local.json
+
+# Reproducible bundled reference renderer (prepared before packaging)
+assets/reference/reference.html
+assets/reference/vendor/

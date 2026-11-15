@@ -1,8 +1,43 @@
-# Easy Astro Studio — 1.6.0 Store update
+# Easy Astro Studio — 1.7.0 Store update
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
 when using the installer. Previously named Astro Studio for Seestar.
+
+## Object Reference (1.7.0)
+
+Click **Object Reference…** at the right of the project toolbar to open a dock
+beside your editing preview. It shares the right-hand dock area with Labels &
+Objects; select their tabs or undock a panel to compare them. The reference stays
+independent of sliders, crop edits, project saving and image exports.
+
+The current image’s complete sky solution suggests a center and field width.
+Without one, a bundled catalog lookup can suggest a known OBJECT name. Otherwise
+select a listed target or enter RA/Dec (degrees) and field width. Check the
+suggestion, allow online requests and click **Load online reference**. Nothing is
+requested merely by opening the panel or moving a slider. Use current image’s
+object / sky position refreshes the suggestion explicitly.
+
+DSS2 color is assembled locally from public HiPS tiles using bundled Aladin Lite
+3.8.2. Automatic mode tries MAST, CSIRO, China-VO and ESA mirrors of the same
+survey. Optional NASA SkyView fallback is clearly labeled **grayscale**. There is
+no API key, account, renderer CDN or survey-registry dependency. Cancel stops local
+waiting; requests already sent cannot be withdrawn. Hide the panel or change the
+loaded image to reset online permission.
+
+Save keeps up to five downloaded color references locally. **Load saved reference
+(offline)** and **Clear saved references** manage that cache. **Open local
+reference…** accepts JPG/PNG/WebP without uploading it. Rotate/flip affect only
+the guide. Survey equipment, filters, epochs and processing differ from your
+capture: this is a structural/framing guide, not predicted output, a color
+calibration or a registered overlay. Source credits and Aladin’s logo are retained.
+
+Builds now run `python scripts/prepare_reference_assets.py` before freezing. The
+script verifies the pinned public renderer and includes its notices and matching
+source under assets/reference/vendor/aladin-lite. See [reference asset notes](assets/reference/README.md)
+and the updated [privacy policy](PRIVACY.md). CI checks the actual Qt browser with
+public M77 coordinates, plus offline operation in the frozen EXE and installed
+MSIX identities. No private capture is part of these tests.
 
 ## Better stacking and selected-sky background extraction (1.6.0)
 
@@ -22,21 +57,6 @@ it, while linear FITS keeps integrated source data.
 
 See [the stacking audit](STACKING_AUDIT.md) for algorithms, small-stack limits,
 weighting assumptions, calibration caveats, metadata and verification.
-
-All 123 local tests and application smoke passed. Windows validation passed:
-110 tests passed, 13 OpenCL tests skipped on that runner; packaged smoke,
-Store-identity activation, Program Files/desktop shortcut and upgrade checks
-succeeded. Local software-OpenCL tests covered GPU parity and fallback.
-
-[Apple implementation handoff](APPLE_HANDOFF_1_6.md) — shared source files,
-algorithms, defaults, project/metadata changes and Metal porting guidance.
-
-[Download the 1.6.0 Windows installer bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/42900292577/artifacts/13803920279).
-Extract and run `installer/EasyAstroStudio-1.6.0-Setup.exe`.
-
-[Download the 1.6.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/42900292577/artifacts/13801239952).
-Extract and upload `EasyAstroStudio-1.6.0-x64-Store-UNSIGNED.msix` to Partner Center
-after testing your own exposures.
 
 ## Windows preview and background updates (1.5.1)
 

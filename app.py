@@ -10,6 +10,7 @@ import engine
 from annotations import LabelsPanel,paint_annotations
 from identify_dialog import IdentifyDialog
 from privacy_viewer import show_privacy
+from reference_view import ReferencePanel,reference_context
 
 from preview import ImagePreview
 from project_store import EditHistory,validate_state,save_project,load_project
@@ -83,6 +84,7 @@ class Window(W.QMainWindow):
         self._history_ready=False;self._restoring=False
         self.project_worker=None;self.project_path=None;self._saved_signature=None;self._dirty=False;self._after_io=None
         self.solution_header=None
+        self.reference_panel=None;self.reference_dock=None
         self.background_fit=None
         self.annotations=[];self.labels_visible=True
         self.source_paths=[]
@@ -301,6 +303,7 @@ class Window(W.QMainWindow):
         self.redo_action=QtGui.QAction('Redo',self);self.redo_action.setShortcuts(['Ctrl+Y','Ctrl+Shift+Z']);self.redo_action.triggered.connect(self.redo_edit)
         for action in (self.new_project_action,self.open_project_action,self.save_project_action,self.undo_action,self.redo_action):toolbar.addAction(action)
         spacer=W.QWidget();spacer.setSizePolicy(W.QSizePolicy.Expanding,W.QSizePolicy.Preferred);toolbar.addWidget(spacer)
+        self.reference_action=QtGui.QAction('Object Reference…',self);self.reference_action.setToolTip('Compare with a survey or local reference without changing your image');toolbar.addAction(self.reference_action);self.reference_action.triggered.connect(self.toggle_reference)
         self.labels_action=QtGui.QAction('Labels && Objects…',self);self.labels_action.setToolTip('Open an image to add labels');toolbar.addAction(self.labels_action)
         self.labels_panel=LabelsPanel();self.labels_dock=W.QDockWidget('Labels && Objects',self);self.labels_dock.setWidget(self.labels_panel);self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.labels_dock);self.labels_dock.hide()
         self.labels_action.triggered.connect(lambda:self.labels_dock.setVisible(not self.labels_dock.isVisible()))
@@ -352,7 +355,31 @@ class Window(W.QMainWindow):
         self.theme_name=apply_theme(W.QApplication.instance(),name)
         self.settings_store.setValue('appearance/theme',self.theme_name);self.settings_store.sync()
         self.theme_actions[self.theme_name].setChecked(True);self.update_planner_banner()
+        if self.reference_panel is not None:self.reference_panel.set_theme(dict(THEMES[self.theme_name],light=self.theme_name=='Light'))
         if hasattr(self,'_clipping_warning'):self.clip_summary.setStyleSheet('color: '+THEMES[self.theme_name]['warning' if self._clipping_warning else 'fg']+';')
+
+    def toggle_reference(self):
+        if self.reference_panel is None:
+            self.reference_panel=ReferencePanel(self)
+            self.reference_panel.contextRequested.connect(self.refresh_reference_context)
+            self.reference_dock=W.QDockWidget('Object Reference',self);self.reference_dock.setWidget(self.reference_panel)
+            self.addDockWidget(QtCore.Qt.RightDockWidgetArea,self.reference_dock)
+            self.tabifyDockWidget(self.labels_dock,self.reference_dock)
+            self.reference_dock.visibilityChanged.connect(lambda visible:self.reference_panel.cancel() if not visible else None)
+            self.reference_panel.set_theme(dict(THEMES[self.theme_name],light=self.theme_name=='Light'))
+            self.refresh_reference_context()
+        elif self.reference_dock.isVisible():
+            self.reference_dock.hide();return
+        self.reference_dock.show();self.reference_dock.raise_()
+        self.resizeDocks([self.reference_dock],[440],QtCore.Qt.Horizontal)
+
+    def refresh_reference_context(self):
+        if self.reference_panel is None:return
+        # Use the original field consistently with the independent reference.
+        # Crops and slider edits never cause new reference requests.
+        image=getattr(self,'original_linear',None)
+        self.reference_panel.set_context(reference_context(getattr(self,'original_header',None),
+            image.shape if image is not None else None,self.solution_header))
 
     def show_about(self):
         box=W.QMessageBox(self);box.setWindowTitle('About Easy Astro Studio');box.setTextFormat(QtCore.Qt.RichText)
@@ -419,6 +446,7 @@ class Window(W.QMainWindow):
         self.annotations=[];self.labels_visible=True;self.refresh_labels();self.labels_dock.hide();self.preview.annotation_placing=False
         self.background_fit=None
         self.linear=self.header=self.rendered=None
+        if self.reference_panel is not None:self.reference_panel.set_context(reference_context())
         self.original_linear=self.original_header=self.background=None
         self.project_path=None;self.source_name='image';self.source_paths=[]
         self.pending_source_paths=[];self.pending_source_name='image';self.files.clear()
@@ -510,6 +538,7 @@ class Window(W.QMainWindow):
         self.background_fit=None
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
+        self.refresh_reference_context()
         self.reset_crop_controls()
         self.background = self.make_background(linear)
         self.curve.set_values(NEUTRAL_CURVE)
@@ -888,6 +917,10 @@ class Window(W.QMainWindow):
         ready=self.linear is not None and self._history_ready
         self.auto_sky_preview.setEnabled(ready and not busy);self.auto_sky.setEnabled(ready and not busy)
         self.reset_crop_preview.setEnabled(ready and not busy);self.restore_crop.setEnabled(ready and not busy)
+        self.reference_action.setEnabled(not busy)
+        if self.reference_panel is not None:
+            self.reference_panel.setEnabled(not busy)
+            if busy:self.reference_panel.cancel()
         self.labels_action.setEnabled(ready and not busy);self.labels_panel.setEnabled(ready and not busy)
         if busy:self.preview.annotation_placing=False
         self.save_stack_button.setEnabled(ready and not busy and not self.header.get('EASRASTR',False) and engine.frame_count(self.original_header)>1)
@@ -1031,7 +1064,8 @@ class Window(W.QMainWindow):
         self.update_actions()
         callback=self._after_io;self._after_io=None
         if callback:QtCore.QTimer.singleShot(0,callback)
-        elif self.linear is not None:self.schedule_preview()
+        elif self.linear is not None:
+            self.refresh_reference_context();self.schedule_preview()
     def closeEvent(self, event):
         if self.project_worker is not None:
             self.log.appendPlainText('Project save/load is in progress. Close again after it finishes.');event.ignore();return
@@ -1046,7 +1080,9 @@ class Window(W.QMainWindow):
         self.timer.stop();self._preview_pending=False
         if self.preview_worker is not None:
             self._close_after_preview=True;self.setEnabled(False);event.ignore();return
-        self._close_after_preview=False;self.setEnabled(True);event.accept()
+        self._close_after_preview=False;self.setEnabled(True)
+        if self.reference_panel is not None:self.reference_panel.shutdown();self.reference_panel=None
+        event.accept()
 
 if __name__ == '__main__':
     from windows_identity import configure_taskbar_identity,has_package_identity
@@ -1159,6 +1195,8 @@ if __name__ == '__main__':
         while (window.preview_worker is not None or window.timer.isActive()) and time.monotonic()<deadline:
             app.processEvents();time.sleep(.01)
         assert window.preview_worker is None,'Preview worker timed out'
+        from reference_smoke import smoke_reference
+        smoke_reference(window,app)
         window.new_project();assert window.linear is None and window.files.count()==0 and window.preview.item.pixmap().isNull()
         if '--require-package-identity' in sys.argv:assert has_package_identity(),'Expected MSIX package identity'
         if '--smoke-result' in sys.argv:

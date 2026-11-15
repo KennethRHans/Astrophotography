@@ -1,6 +1,6 @@
 # Easy Astro Studio Privacy Policy
 
-**Effective date: November 9, 2026**
+**Effective date: November 15, 2026**
 
 Easy Astro Studio is a Windows desktop application published by **Astrivanta**.
 This policy explains how information is handled when you use the application,
@@ -185,3 +185,11 @@ remains available for the Microsoft Store listing.
 We may update this policy when the app or its data practices change. Updates
 will be posted on this page with a revised effective date. For questions about
 this policy, contact **starsandfits@gmail.com**.
+
+## Optional Object Reference panel
+
+Object Reference is an independent visual guide. Opening it does not send a request. You must allow online access and click Load. Suggested sky positions come from your image’s sky solution or a local object-name lookup. Check them before loading.
+
+DSS2 color reference requests go to the selected mirror(s) at MAST (STScI), CSIRO, China-VO and/or ESA. If enabled, grayscale fallback goes to NASA SkyView. Requests disclose selected sky coordinates, field width, requested survey tiles, your IP address and ordinary connection information to the service. Your working image, filename, full FITS header and API keys are never supplied to the reference renderer or these services. These providers apply their own terms, logging and retention policies. Source links open your default browser only when clicked.
+
+The Aladin Lite renderer is bundled locally; no renderer CDN or account is required. With Save enabled, up to five downloaded color references, their coordinates, credits and save dates are kept in the app’s local browser storage for offline reuse. Clear saved references removes this cache. Local reference photos are opened in memory and are not added to it. Requests may also use an in-memory HTTP cache. Closing/hiding the panel or changing the loaded image cancels pending work locally and resets online permission; it cannot withdraw requests already received by a provider. References do not alter your projects, processing pixels or exports.

@@ -4,6 +4,8 @@ py -3.12 -m venv .venv
 if errorlevel 1 goto fail
 .venv\Scripts\python -m pip install -r requirements.txt "pyinstaller>=6.16,<7"
 if errorlevel 1 goto fail
+.venv\Scripts\python scripts/prepare_reference_assets.py
+if errorlevel 1 goto fail
 .venv\Scripts\python -m pip uninstall -y pytest
 .venv\Scripts\python -m PyInstaller --noconfirm --clean --windowed --name EasyAstroStudio --version-file version_info.txt --add-data "assets;assets" --collect-data pyopencl --hidden-import sep --collect-submodules skimage.transform app.py
 if errorlevel 1 goto fail
