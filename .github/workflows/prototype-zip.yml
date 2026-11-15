@@ -21,7 +21,7 @@ jobs:
           TEST_LIVE_REFERENCE: '1'
           REFERENCE_SCREENSHOT: Reference-View-Preview.png
         run: |
-          google-chrome --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-port=9233 --user-data-dir="$RUNNER_TEMP/ref-browser" --no-first-run --no-default-browser-check about:blank > "$RUNNER_TEMP/chrome.log" 2>&1 &
+          google-chrome --headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader --use-angle=swiftshader --remote-debugging-port=9233 --user-data-dir="$RUNNER_TEMP/ref-browser" --no-first-run --no-default-browser-check about:blank > "$RUNNER_TEMP/chrome.log" 2>&1 &
           python -m http.server 8133 --bind 127.0.0.1 > "$RUNNER_TEMP/ref-server.log" 2>&1 &
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:9233/json > /dev/null; then break; fi
@@ -43,4 +43,5 @@ jobs:
             Reference-View-Test.html
             START-HERE.txt
             README.md
+            THIRD-PARTY-NOTICES.txt
           if-no-files-found: error

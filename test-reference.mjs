@@ -4,6 +4,7 @@ const evaluate=async expression=>{const r=await send('Runtime.evaluate',{express
 try{
 await send('Network.enable');await send('Runtime.enable');await send('Page.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1160,deviceScaleFactor:1,mobile:false});await send('Page.navigate',{url:'http://127.0.0.1:8133/Reference-View-Test.html'});await new Promise(r=>setTimeout(r,500));
 await check('Consent required; no auto request',`$('loadReference').disabled && $('referenceImage').hidden && $('exposure').disabled`);if(requests.some(u=>u.startsWith('https:')))throw Error('Unexpected outbound request');
+await evaluate(`$('provider').value='nasa';$('provider').dispatchEvent(new Event('change'));`);
 await check('Local synthetic demo and sliders',`$('demo').click();$('exposure').value=1;sliders();$('workingCanvas').style.filter.includes('brightness(2)') && !$('workingCanvas').hidden && $('workingTag').textContent.includes('SYNTHETIC')`);
 await check('Reset restores neutral display',`$('reset').click();$('exposure').value==='0' && $('contrast').value==='1' && $('saturation').value==='1'`);
 await check('Local PNG decoding and local object suggestion',`(async()=>{const blob=await new Promise(resolve=>$('workingCanvas').toBlob(resolve));window.fixture=new File([blob],'M77_synthetic_test.png',{type:'image/png'});await openWorking(fixture);return $('target').value==='M77' && $('workingCaption').textContent.includes('M77_synthetic_test.png')})()`);
@@ -17,6 +18,10 @@ await check('Target change clears stale reference',`$('target').value='M31';sele
 await check('Request diagnostics omit local file information',`requestDetails();$('requestDetails').textContent.includes('skyview.gsfc.nasa.gov') && !$('requestDetails').textContent.includes('M77_synthetic_test.png')`);
 await check('Blank RA is rejected instead of silently using zero',`(()=>{const old=$('ra').value;$('ra').value='';let rejected=false;try{selectedRequest()}catch(e){rejected=true}$('ra').value=old;return rejected})()`);
 await check('Browser-request button also requires consent',`$('openRequest').disabled`);
+await check('Color choices and mirror order',`colorMirrors.map(m=>m.id).join(',')==='mast,csiro,china,esa' && $('provider').querySelector('option[value=color]')!==null`);
+await check('Color export cache is local, bounded and can load offline',`(()=>{const data=$('workingCanvas').toDataURL('image/jpeg');const caption='Synthetic cache fixture only';const result=saveCachedReference(data,caption,'DSS2/color',Number($('ra').value),Number($('dec').value),Number($('fov').value));if(!result.includes('Saved'))return false;$('provider').value='color';$('loadSaved').click();const ok=!$('referenceImage').hidden&&$('referenceStatus').textContent.includes('offline');$('clearSaved').click();$('provider').value='nasa';return ok&&cacheEntries().length===0})()`);
+await check('Color mirror failure falls through without changing survey',`(async()=>{const original=renderColorTile;let calls=[];renderColorTile=async(mirror)=>{calls.push(mirror.id);if(mirror.id==='mast')throw Error('Simulated 503');return {data:$('workingCanvas').toDataURL('image/jpeg'),tiles:2}};try{const result=await renderDssColor(40,0,.5,refGeneration);return calls.join(',')==='mast,csiro'&&result.mirror.id==='csiro'&&result.attempts[0].includes('503')}finally{renderColorTile=original}})()`);
+await check('Cancelling does not contact the next mirror',`(async()=>{const original=renderColorTile;let calls=0;renderColorTile=async()=>{calls++;refGeneration++;throw Error('Cancelled')};try{await renderDssColor(40,0,.5,refGeneration);return false}catch(e){return calls===1}finally{renderColorTile=original}})()`);
 await check('Online success wiring (mock transport)',`(async()=>{window.RealImage=Image;window.stubInstances=[];window.Image=class{constructor(){stubInstances.push(this)}set src(v){this.url=v;}get src(){return $('workingCanvas').toDataURL()}};$('consent').checked=true;$('consent').dispatchEvent(new Event('change'));$('loadReference').click();const stub=stubInstances.at(-1);stub.onload();return !$('referenceImage').hidden && $('referenceCaption').textContent.includes('DSS2')})()`);
 await check('Cancellation invalidates pending request',`$('loadReference').click();$('cancelReference').click();$('referenceView').classList.contains('loading')===false && $('cancelReference').disabled`);
 await check('Online failure retains working picture',`(()=>{const width=$('workingCanvas').width;$('loadReference').click();stubInstances.at(-1).onerror();return $('referenceStatus').classList.contains('error') && $('workingCanvas').width===width && !$('workingCanvas').hidden})()`);
@@ -32,6 +37,13 @@ if(process.env.TEST_LIVE_REFERENCE==='1'){
   let live;const deadline=Date.now()+80000;
   do{await new Promise(r=>setTimeout(r,500));live=await evaluate(`({loaded:!$('referenceImage').hidden&&$('referenceImage').naturalWidth>0,status:$('referenceStatus').textContent,error:$('referenceStatus').classList.contains('error'),width:$('referenceImage').naturalWidth})`);}while(!live.loaded&&!live.error&&Date.now()<deadline);
   console.log('LIVE_BROWSER_RESULT '+JSON.stringify(live));if(!live.loaded)throw Error('Live NASA browser image did not load: '+live.status);
+  await evaluate(`$('provider').value='color';$('provider').dispatchEvent(new Event('change'));$('loadReference').click();`);
+  const colorDeadline=Date.now()+155000;let color;
+  do{await new Promise(r=>setTimeout(r,700));color=await evaluate(`({loaded:!$('referenceImage').hidden&&$('referenceImage').naturalWidth>0,status:$('referenceStatus').textContent,error:$('referenceStatus').classList.contains('error'),provider:$('provider').value,details:$('requestDetails').textContent,caption:$('referenceCaption').textContent})`);}while(!color.loaded&&!color.error&&Date.now()<colorDeadline);
+  console.log('LIVE_COLOR_RESULT '+JSON.stringify(color));if(!color.loaded||color.provider!=='color'||!color.caption.includes('DSS2 color'))throw Error('Live color browser image did not load: '+color.status+' '+color.details);
+  await evaluate(`$('consent').checked=false;$('consent').dispatchEvent(new Event('change'));$('clearReference').click();$('loadSaved').click();`);
+  await check('Real color image reloads from saved cache without consent',`!$('referenceImage').hidden&&$('referenceStatus').textContent.includes('offline')`);
+
 }
 
 }finally{ws.close();}

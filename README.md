@@ -1,7 +1,7 @@
-# Reference View standalone test 0.2
+# Standalone reference-view test 0.3
 
-NASA SkyView DSS2 Red (grayscale) is now the default after live checks found CDS primary returning 404 and its mirror timing out. The test adds provider selection, request diagnostics and an Open request in browser control. Local images are not uploaded. This isolated branch creates only a standalone HTML download, not an Easy Astro Studio update or installer.
+This isolated prototype adds DSS2 color references assembled directly from HiPS tiles, bypassing the failed cutout service. Default mirror order: MAST, CSIRO, China-VO, ESA. Includes loading/source status, cancellation, optional NASA grayscale fallback and a five-reference browser-local offline cache. No user working image is uploaded or cached.
 
-Extract the ZIP and open Reference-View-Test.html in Edge or Chrome. Read START-HERE.txt for supported FITS layouts and limitations. Grayscale references guide structure/framing, not color or predicted final quality.
+Extract the ZIP and open Reference-View-Test.html in Edge/Chrome. Read START-HERE and THIRD-PARTY-NOTICES. Uses the unmodified Aladin Lite 3.8.2 module from jsDelivr only after consent. No Easy Astro Studio update or installer is built on this branch.
 
-The workflow checks public services and runs browser regression tests plus a real NASA image load from a file:// page. Check the workflow result before relying on service availability.
+Local mocked browser regressions passed; the workflow tests live tile services, actual browser color loading and offline reuse. Check the run result for availability.

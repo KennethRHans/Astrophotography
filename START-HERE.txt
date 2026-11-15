@@ -1,70 +1,55 @@
-Easy Astro Studio — Reference View standalone test 0.2
+Easy Astro Studio — Reference View standalone test 0.3
 
-This is NOT an Easy Astro Studio update or installer. It does not change the
-installed application, its projects, settings or original image files.
+This is NOT an app update or installer. It does not change Easy Astro Studio,
+its projects or settings. Extract the ZIP, then open Reference-View-Test.html
+in Edge or Chrome. A WebGL2-capable browser is needed for color rendering.
 
-1. Extract this ZIP to a folder.
-2. Double-click Reference-View-Test.html. Use Microsoft Edge or Google Chrome.
-3. On the left choose a local FITS stack, JPG or PNG. Or try the clearly labeled
-   synthetic demo to explore the interface. The simple sliders are browser
-   display controls, not Easy Astro Studio processing.
-4. On the right check the suggested object and field width. Common targets are
-   supplied, or choose Custom sky coordinates and enter RA/Dec in DEGREES.
-5. Either open your own local reference photo (works offline), OR check the CDS
-   request consent and press Load online reference. NASA SkyView / DSS2 Red
-   (GRAYSCALE) is now the default. No API key is required.
-   If loading fails, click Open request in browser and inspect Request details.
-   CDS color and its mirror remain selectable, but the primary returned 404
-   and the mirror timed out in the service check.
-6. Rotate/mirror the reference if helpful. This does not align or plate-solve
-   either picture. Changing the object/field clears an obsolete reference.
+1. Open a local FITS stack, JPG or PNG on the left, or try the synthetic demo.
+   These browser sliders test the layout, not the Windows processing algorithms.
+2. Check the selected object, coordinates and field width on the right.
+3. Leave DSS color — automatic mirror fallback selected, check online consent,
+   and click Load online reference. The first color load downloads the pinned
+   Aladin Lite renderer from jsDelivr (roughly 2.3 MB), then public survey tiles.
+4. Automatic mode tries the SAME DSS color survey at MAST, CSIRO, China-VO,
+   then ESA. Loading status names the active source. Cancel stops the local
+   renderer and prevents subsequent mirror attempts. Requests already sent
+   cannot be withdrawn. You can also select one mirror manually.
+5. If all color attempts fail, the checked grayscale fallback option selects
+   NASA SkyView explicitly; its caption identifies grayscale, not color.
+6. Save downloaded color reference in this browser is enabled by default.
+   Up to five downloaded color snapshots, sky coordinates, dates and credits
+   are saved. Uncheck it if you do not want storage. Load saved reference
+   works without online consent and without starting the renderer. Clear saved
+   references removes only this small cache. File-origin storage support varies
+   by browser/profile; unavailable/full storage does not prevent viewing.
+7. You can always open a local reference photo. Local working/reference files
+   are never uploaded and are never added to the saved-online-reference cache.
 
-What the reference means
-A sky-survey image is an independent guide to structure/framing, not a prediction
-of what your capture can achieve. Different optics, filters, exposure and image
-processing affect colors and visible detail. No image generation or invented
-replacement detail is used. No automatic editing/stacking/export is included.
-DSS2 is photographic survey imagery, not a curated finished Seestar photograph.
+Privacy and limits
+Only public sky coordinates/field width enter the sandboxed renderer, not your
+image, filename, FITS header or API keys. The renderer is loaded only after the
+online consent and Load action. Color requests go to jsDelivr and the selected
+mirror(s), including ESA's CDN if redirected. If enabled, NASA is tried after
+color failure. There is no background search or analytics; renderer logging is
+disabled. Browser HTTP caching is separate from the five-image saved cache.
 
-Privacy
-Local files remain in browser memory. No image, filename, FITS header or API key
-is uploaded. Online image requests send selected sky coordinates/field width and
-normal browser connection information to the provider you selected: skyview.gsfc.nasa.gov (NASA), or
-alasky.cds.unistra.fr / alaskybis.cds.unistra.fr (CDS). Requests
-only start after consent and the Load button. The browser may cache responses.
-Reloading clears local selections; this prototype has no persistent image cache.
-Cancelling stops local waiting, but cannot withdraw a request already received.
+A survey is a guide to structure/framing, not predicted finished output or color
+calibration. DSS plate colors, filters, depth, resolution and epoch differ from
+your capture. No replacement detail is generated. No stacking/export is added.
 
-FITS limits
-Uncompressed primary-image 2D monochrome or three-plane RGB; BITPIX 8/16/32/-32/-64.
-BSCALE/BZERO supported. Display is an approximate sampled asinh stretch capped at
-1600 pixels, with a 256 MB file limit. Raw Bayer frames are NOT debayered. For
-accurate editing or unsupported FITS layouts, keep using Easy Astro Studio.
+FITS: uncompressed primary image, 2D monochrome or three-plane RGB, BITPIX
+8/16/32/-32/-64 and BSCALE/BZERO. Approximate sampled asinh preview up to 1600 px,
+256 MB input limit. Raw Bayer is shown as monochrome, without debayering. Use
+Easy Astro Studio for accurate processing or unsupported layouts.
 
-Validation
-18 automated browser checks passed using headless Chromium through localhost:
-local raster decoding, FITS parsing/scaling and truncation guards, no automatic
-online requests, URL parameter validation, sliders/reset, reference isolation,
-rotation/reset, selection invalidation, cancellation, online success/error wiring
-with MOCK transport, and narrow-window layout. No external image requests were
-made during those tests. The cloud environment blocks these survey hosts, so independent GitHub
-checks were added. NASA returned valid JPEG images; CDS primary returned 404
-and the CDS mirror timed out. A separate live browser check is run in GitHub.
-Managed cloud Chromium also blocks file:// navigation, so browser tests used a
-localhost server. Ordinary Edge/Chrome installations can usually open local HTML.
-If your organization blocks local HTML, use its approved browser or ask its IT
-administrator; do not weaken browser protections. Repeat online loading on your own Windows computer too, as local browser
-policies and network connectivity can differ.
+Online source checks found valid metadata and 512px JPEG tiles at MAST, CSIRO
+and China-VO; ESA timed out then. Service availability changes. Browser checks
+include no pre-consent requests, privacy, FITS/raster loading, independent
+sliders, orientation, cancellation, same-survey fallback and offline cache.
+The download workflow also attempts a real color render from the extracted
+file-style page and verifies that the saved color result reloads offline.
 
-Source and credits
-NASA SkyView / HEASARC: https://skyview.gsfc.nasa.gov/
-Default survey: DSS2 Red, grayscale; this is not a color-calibration guide.
-CDS HiPS2FITS: https://alasky.cds.unistra.fr/hips-image-services/hips2fits
-HiPS survey information: https://aladin.cds.unistra.fr/hips/
-DSS2 color: STScI / photographic survey contributors, delivered by CDS.
-Consult the survey's terms before redistributing images. Local reference photos
-are supplied by you; their identity, processing and permissions are not verified.
-
-Files
-Reference-View-Test.html — entire standalone prototype; no dependencies
-START-HERE.txt — these instructions
+See Request details for source diagnostics. Open source in browser opens a HiPS
+metadata page for color mode, or the actual JPEG request for NASA mode.
+Credits and renderer licensing: THIRD-PARTY-NOTICES.txt; the Aladin logo remains
+on color references. No user images/private diagnostics are in the download.

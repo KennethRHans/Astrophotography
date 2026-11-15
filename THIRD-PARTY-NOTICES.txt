@@ -1,0 +1,17 @@
+Aladin Lite 3.8.2 — CDS, Thomas Boch, Matthieu Baumann and contributors.
+License: LGPL-3.0-or-later. The prototype dynamically imports the unmodified
+published module from https://cdn.jsdelivr.net/npm/aladin-lite@3.8.2/dist/aladin.js
+only after online consent. No library binary is redistributed in this ZIP.
+Source: https://github.com/cds-astro/aladin-lite
+Package/source version: https://www.npmjs.com/package/aladin-lite/v/3.8.2
+License: https://github.com/cds-astro/aladin-lite/blob/master/LICENSE
+GPL text: https://github.com/cds-astro/aladin-lite/blob/master/COPYING
+The renderer logo is retained on generated references. The UI links to Aladin.
+
+DSS2 color data: Digitized Sky Survey / STScI / NASA; color combination and HiPS
+preparation by CDS/CNRS/Universite de Strasbourg. Mirror providers: MAST/STScI,
+CSIRO, China-VO, ESA. Source credits are retained with cached reference images.
+Use of this reference viewer does not grant redistribution rights to survey
+imagery; consult each source's metadata and terms before publishing images.
+
+NASA fallback: NASA SkyView / HEASARC, DSS2 Red photographic survey grayscale.
