@@ -1,0 +1,23 @@
+name: Standalone reference prototype ZIP
+on:
+  push:
+    branches: ['prototype/reference-view-standalone']
+permissions:
+  contents: read
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify standalone files
+        run: |
+          test -s Reference-View-Test.html
+          test -s START-HERE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Easy-Astro-Reference-View-Standalone
+          path: |
+            Reference-View-Test.html
+            START-HERE.txt
+            README.md
+          if-no-files-found: error

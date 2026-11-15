@@ -1,0 +1,62 @@
+Easy Astro Studio — Reference View standalone prototype
+
+This is NOT an Easy Astro Studio update or installer. It does not change the
+installed application, its projects, settings or original image files.
+
+1. Extract this ZIP to a folder.
+2. Double-click Reference-View-Test.html. Use Microsoft Edge or Google Chrome.
+3. On the left choose a local FITS stack, JPG or PNG. Or try the clearly labeled
+   synthetic demo to explore the interface. The simple sliders are browser
+   display controls, not Easy Astro Studio processing.
+4. On the right check the suggested object and field width. Common targets are
+   supplied, or choose Custom sky coordinates and enter RA/Dec in DEGREES.
+5. Either open your own local reference photo (works offline), OR check the CDS
+   request consent and press Load online reference. No API key is required.
+6. Rotate/mirror the reference if helpful. This does not align or plate-solve
+   either picture. Changing the object/field clears an obsolete reference.
+
+What the reference means
+A sky-survey image is an independent guide to structure/framing, not a prediction
+of what your capture can achieve. Different optics, filters, exposure and image
+processing affect colors and visible detail. No image generation or invented
+replacement detail is used. No automatic editing/stacking/export is included.
+DSS2 is photographic survey imagery, not a curated finished Seestar photograph.
+
+Privacy
+Local files remain in browser memory. No image, filename, FITS header or API key
+is uploaded. Online image requests send selected sky coordinates/field width and
+normal browser connection information to alasky.cds.unistra.fr (CDS). Requests
+only start after consent and the Load button. The browser may cache responses.
+Reloading clears local selections; this prototype has no persistent image cache.
+Cancelling stops local waiting, but cannot withdraw a request already received.
+
+FITS limits
+Uncompressed primary-image 2D monochrome or three-plane RGB; BITPIX 8/16/32/-32/-64.
+BSCALE/BZERO supported. Display is an approximate sampled asinh stretch capped at
+1600 pixels, with a 256 MB file limit. Raw Bayer frames are NOT debayered. For
+accurate editing or unsupported FITS layouts, keep using Easy Astro Studio.
+
+Validation
+15 automated browser checks passed using headless Chromium through localhost:
+local raster decoding, FITS parsing/scaling and truncation guards, no automatic
+online requests, URL parameter validation, sliders/reset, reference isolation,
+rotation/reset, selection invalidation, cancellation, online success/error wiring
+with MOCK transport, and narrow-window layout. No external image requests were
+made during those tests. The live CDS endpoint could not be verified because
+this cloud environment's outbound network policy blocked the destination.
+Managed cloud Chromium also blocks file:// navigation, so browser tests used a
+localhost server. Ordinary Edge/Chrome installations can usually open local HTML.
+If your organization blocks local HTML, use its approved browser or ask its IT
+administrator; do not weaken browser protections. Online survey loading remains
+an integration test to repeat on your Windows computer.
+
+Source and credits
+CDS HiPS2FITS: https://alasky.cds.unistra.fr/hips-image-services/hips2fits
+HiPS survey information: https://aladin.cds.unistra.fr/hips/
+DSS2 color: STScI / photographic survey contributors, delivered by CDS.
+Consult the survey's terms before redistributing images. Local reference photos
+are supplied by you; their identity, processing and permissions are not verified.
+
+Files
+Reference-View-Test.html — entire standalone prototype; no dependencies
+START-HERE.txt — these instructions
