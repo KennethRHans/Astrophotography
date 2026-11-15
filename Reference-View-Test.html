@@ -148,13 +148,14 @@ async function tileWorker(config){
   let moduleUrl=config.library;let ownedUrl=null;if(config.moduleBase64){const binary=atob(config.moduleBase64);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);ownedUrl=URL.createObjectURL(new Blob([bytes],{type:'text/javascript'}));moduleUrl=ownedUrl;}
   const {default:A}=await import(moduleUrl);if(ownedUrl)URL.revokeObjectURL(ownedUrl);emit('progress',{detail:'Renderer library loaded'});await Promise.race([A.init,new Promise((_,reject)=>setTimeout(()=>reject(Error('WebAssembly initialization timed out')),10000))]);emit('progress',{detail:'WebGL renderer ready'});
   const survey=A.HiPS(config.base,{name:'DSS2 color — '+config.name,imgFormat:'jpeg',requestCredentials:'omit',errorCallback:e=>emit('error',{detail:'Survey setup failed: '+String(e).slice(0,180)}),successCallback:()=>emit('progress',{detail:'Mirror survey ready'})});
-  const aladin=A.aladin('#sky',{survey,mode:'dark',target:[config.ra,config.dec],fov:config.fov,projection:'TAN',cooFrame:'ICRS',showReticle:false,showZoomControl:false,showFullscreenControl:false,showLayersControl:false,showGotoControl:false,showShareControl:false,showSimbadPointerControl:false,showCooGridControl:false,showSettingsControl:false,showContextMenu:false,showStatusBar:false,log:false});
+  const aladin=A.aladin('#sky',{survey,mode:'dark',target:config.ra+' '+config.dec,fov:config.fov,projection:'TAN',cooFrame:'ICRS',showReticle:false,showZoomControl:false,showFullscreenControl:false,showLayersControl:false,showGotoControl:false,showShareControl:false,showSimbadPointerControl:false,showCooGridControl:false,showSettingsControl:false,showContextMenu:false,showStatusBar:false,log:false});
+  aladin.gotoRaDec(config.ra,config.dec);aladin.setFoV(config.fov);
   const deadline=performance.now()+21000;
   while(performance.now()<deadline){
    await new Promise(r=>setTimeout(r,350));
    emit('progress',{detail:received+' color tiles received'+(active?' · loading…':'')});
    if(received>0&&active===0&&performance.now()-last>1400){
-    const [ra,dec]=aladin.getRaDec();if(Math.abs(ra-config.ra)>.01||Math.abs(dec-config.dec)>.01)throw Error('Unexpected view center');
+    const [ra,dec]=aladin.getRaDec();if(Math.abs(((ra-config.ra+540)%360)-180)>.01||Math.abs(dec-config.dec)>.01)throw Error('Unexpected view center: '+ra+','+dec);const field=aladin.getFov?.()||aladin.getFoV?.();if(field&&Math.abs(field[0]-config.fov)>config.fov*.03)throw Error('Unexpected field width');
     const data=await aladin.getViewDataURL({format:'image/jpeg',width:512,height:512,logo:true});
     // Verify the central field, excluding the logo and border, contains image
     // data. Never accept a black placeholder as a successful reference.
