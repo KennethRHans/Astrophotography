@@ -1,0 +1,30 @@
+name: Apple reference handoff 1.7.0
+on:
+  push:
+permissions:
+  contents: read
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: handoff
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 14258de020e5cbfbdd862d7af10804f42af78a98
+          path: windows-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare pinned renderer, licenses and matching source
+        run: python windows-source/scripts/prepare_reference_assets.py
+      - name: Assemble and verify source handoff only
+        run: python handoff/package_handoff.py windows-source handoff delivery/EasyAstroStudio-Apple-Handoff-1.7.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-Apple-Handoff-1.7.0
+          path: delivery/EasyAstroStudio-Apple-Handoff-1.7.0/
+          if-no-files-found: error
