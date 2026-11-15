@@ -1,0 +1,25 @@
+name: Installer download 1.7.0
+on:
+  push:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: EasyAstroStudio-Windows
+          run-id: 43742762788
+          github-token: ${{ github.token }}
+          path: tested
+      - name: Verify tested installer
+        run: |
+          test -s tested/installer/EasyAstroStudio-1.7.0-Setup.exe
+          sha256sum tested/installer/EasyAstroStudio-1.7.0-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-1.7.0-Installer
+          path: tested/installer/EasyAstroStudio-1.7.0-Setup.exe
+          if-no-files-found: error
