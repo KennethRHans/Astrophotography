@@ -1,3 +1,7 @@
-# Easy Astro Studio reference-view standalone test
+# Reference View standalone test 0.2
 
-Download the ZIP from this branch or its Actions artifact, extract it, then open `Reference-View-Test.html` in Edge or Chrome. Read START-HERE.txt for limits and test results. This isolated branch contains only the prototype and instructions, not an Easy Astro Studio update or installer. Live CDS access remains unverified from the cloud due to its network policy; local and simulated-network browser checks passed. No user images or private files are included.
+NASA SkyView DSS2 Red (grayscale) is now the default after live checks found CDS primary returning 404 and its mirror timing out. The test adds provider selection, request diagnostics and an Open request in browser control. Local images are not uploaded. This isolated branch creates only a standalone HTML download, not an Easy Astro Studio update or installer.
+
+Extract the ZIP and open Reference-View-Test.html in Edge or Chrome. Read START-HERE.txt for supported FITS layouts and limitations. Grayscale references guide structure/framing, not color or predicted final quality.
+
+The workflow checks public services and runs browser regression tests plus a real NASA image load from a file:// page. Check the workflow result before relying on service availability.

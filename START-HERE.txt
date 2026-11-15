@@ -1,4 +1,4 @@
-Easy Astro Studio — Reference View standalone prototype
+Easy Astro Studio — Reference View standalone test 0.2
 
 This is NOT an Easy Astro Studio update or installer. It does not change the
 installed application, its projects, settings or original image files.
@@ -11,7 +11,11 @@ installed application, its projects, settings or original image files.
 4. On the right check the suggested object and field width. Common targets are
    supplied, or choose Custom sky coordinates and enter RA/Dec in DEGREES.
 5. Either open your own local reference photo (works offline), OR check the CDS
-   request consent and press Load online reference. No API key is required.
+   request consent and press Load online reference. NASA SkyView / DSS2 Red
+   (GRAYSCALE) is now the default. No API key is required.
+   If loading fails, click Open request in browser and inspect Request details.
+   CDS color and its mirror remain selectable, but the primary returned 404
+   and the mirror timed out in the service check.
 6. Rotate/mirror the reference if helpful. This does not align or plate-solve
    either picture. Changing the object/field clears an obsolete reference.
 
@@ -25,7 +29,8 @@ DSS2 is photographic survey imagery, not a curated finished Seestar photograph.
 Privacy
 Local files remain in browser memory. No image, filename, FITS header or API key
 is uploaded. Online image requests send selected sky coordinates/field width and
-normal browser connection information to alasky.cds.unistra.fr (CDS). Requests
+normal browser connection information to the provider you selected: skyview.gsfc.nasa.gov (NASA), or
+alasky.cds.unistra.fr / alaskybis.cds.unistra.fr (CDS). Requests
 only start after consent and the Load button. The browser may cache responses.
 Reloading clears local selections; this prototype has no persistent image cache.
 Cancelling stops local waiting, but cannot withdraw a request already received.
@@ -37,20 +42,23 @@ BSCALE/BZERO supported. Display is an approximate sampled asinh stretch capped a
 accurate editing or unsupported FITS layouts, keep using Easy Astro Studio.
 
 Validation
-15 automated browser checks passed using headless Chromium through localhost:
+18 automated browser checks passed using headless Chromium through localhost:
 local raster decoding, FITS parsing/scaling and truncation guards, no automatic
 online requests, URL parameter validation, sliders/reset, reference isolation,
 rotation/reset, selection invalidation, cancellation, online success/error wiring
 with MOCK transport, and narrow-window layout. No external image requests were
-made during those tests. The live CDS endpoint could not be verified because
-this cloud environment's outbound network policy blocked the destination.
+made during those tests. The cloud environment blocks these survey hosts, so independent GitHub
+checks were added. NASA returned valid JPEG images; CDS primary returned 404
+and the CDS mirror timed out. A separate live browser check is run in GitHub.
 Managed cloud Chromium also blocks file:// navigation, so browser tests used a
 localhost server. Ordinary Edge/Chrome installations can usually open local HTML.
 If your organization blocks local HTML, use its approved browser or ask its IT
-administrator; do not weaken browser protections. Online survey loading remains
-an integration test to repeat on your Windows computer.
+administrator; do not weaken browser protections. Repeat online loading on your own Windows computer too, as local browser
+policies and network connectivity can differ.
 
 Source and credits
+NASA SkyView / HEASARC: https://skyview.gsfc.nasa.gov/
+Default survey: DSS2 Red, grayscale; this is not a color-calibration guide.
 CDS HiPS2FITS: https://alasky.cds.unistra.fr/hips-image-services/hips2fits
 HiPS survey information: https://aladin.cds.unistra.fr/hips/
 DSS2 color: STScI / photographic survey contributors, delivered by CDS.

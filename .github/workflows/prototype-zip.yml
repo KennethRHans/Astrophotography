@@ -9,10 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Check public reference services
         run: |
           python -m pip install pillow
           python check_services.py
+      - name: Browser regression and live NASA image check
+        env:
+          TEST_LIVE_REFERENCE: '1'
+          REFERENCE_SCREENSHOT: Reference-View-Preview.png
+        run: |
+          google-chrome --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-port=9233 --user-data-dir="$RUNNER_TEMP/ref-browser" --no-first-run --no-default-browser-check about:blank > "$RUNNER_TEMP/chrome.log" 2>&1 &
+          python -m http.server 8133 --bind 127.0.0.1 > "$RUNNER_TEMP/ref-server.log" 2>&1 &
+          sleep 3
+          node test-reference.mjs
       - name: Verify standalone files
         run: |
           test -s Reference-View-Test.html

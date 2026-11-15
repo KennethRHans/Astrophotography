@@ -4,7 +4,7 @@ from PIL import Image
 params=dict(hips='CDS/P/DSS2/color',width=256,height=256,fov=.5,projection='TAN',coordsys='icrs',ra=40.6696,dec=-.0133,format='jpg')
 cases=[('CDS primary','https://alasky.cds.unistra.fr/hips-image-services/hips2fits?'+urllib.parse.urlencode(params)),('CDS mirror','https://alaskybis.cds.unistra.fr/hips-image-services/hips2fits?'+urllib.parse.urlencode(params))]
 for survey in ['DSS2 Red','DSS']:
-    p=dict(Position='40.6696,-0.0133',Survey=survey,Return='JPEG',Pixels=256,Size=.5,Projection='Tan',Coordinates='J2000',Scaling='Log')
+    p=dict(Position='40.6696,-0.0133',Survey=survey,Return='JPEG',Pixels=512,Size=.5,Projection='Tan',Coordinates='J2000',Scaling='Log')
     cases.append(('NASA SkyView '+survey,'https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?'+urllib.parse.urlencode(p)))
 def check(case):
     name,url=case
