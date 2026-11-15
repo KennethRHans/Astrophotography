@@ -1,24 +1,21 @@
-"""Public M77 service diagnostics; no user files, headers or credentials."""
-import concurrent.futures,io,json,urllib.request,urllib.parse
+"""Public mirror probes only; no user image or metadata."""
+import concurrent.futures,urllib.request,json,io
 from PIL import Image
-params=dict(hips='CDS/P/DSS2/color',width=256,height=256,fov=.5,projection='TAN',coordsys='icrs',ra=40.6696,dec=-.0133,format='jpg')
-cases=[('CDS primary','https://alasky.cds.unistra.fr/hips-image-services/hips2fits?'+urllib.parse.urlencode(params)),('CDS mirror','https://alaskybis.cds.unistra.fr/hips-image-services/hips2fits?'+urllib.parse.urlencode(params))]
-for survey in ['DSS2 Red','DSS']:
-    p=dict(Position='40.6696,-0.0133',Survey=survey,Return='JPEG',Pixels=512,Size=.5,Projection='Tan',Coordinates='J2000',Scaling='Log')
-    cases.append(('NASA SkyView '+survey,'https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?'+urllib.parse.urlencode(p)))
-def check(case):
-    name,url=case
-    try:
-        request=urllib.request.Request(url,headers={'User-Agent':'EasyAstroStudio-ReferencePrototype/0.2 public service check'})
-        with urllib.request.urlopen(request,timeout=25) as r:
-            data=r.read(6*1024*1024);content_type=r.headers.get('Content-Type','');status=r.status
-        try:
-            image=Image.open(io.BytesIO(data));image.load()
-            result=dict(name=name,status=status,content_type=content_type,image=True,size=image.size)
-        except Exception:
-            result=dict(name=name,status=status,content_type=content_type,image=False,preview=data[:120].decode('utf-8',errors='replace'))
-    except Exception as exc:result=dict(name=name,error=str(exc))
-    print('PROBE_RESULT '+json.dumps(result),flush=True)
-    return result
-with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(check,cases))
-with open('service-check.json','w') as f:json.dump(results,f,indent=2)
+bases=[('ESA','https://skies.esac.esa.int/DSSColor'),('MAST','https://stpubdata.s3.us-east-1.amazonaws.com/mast/skybackgrounds/DSSColor'),('CSIRO','https://casda.csiro.au/hips/DSS2/color'),('China-VO','https://hips.china-vo.org/m/CDS_P_DSS2_color')]
+def check(item):
+ name,base=item;result=dict(name=name)
+ for suffix in ['/properties','/Norder3/Dir0/Npix0.jpg']:
+  try:
+   req=urllib.request.Request(base+suffix,headers={'User-Agent':'EasyAstroStudio-ReferenceTest/0.3','Origin':'null'})
+   with urllib.request.urlopen(req,timeout=15) as r:data=r.read(2*1024*1024);status=r.status;cors=r.headers.get('Access-Control-Allow-Origin');final=r.url
+   entry=dict(status=status,cors=cors,final=final)
+   if suffix=='/properties':
+    props=dict(line.split('=',1) for line in data.decode().splitlines() if '=' in line and not line.startswith('#'))
+    entry['properties']={k.strip():v.strip() for k,v in props.items() if k.strip() in ['hips_order','hips_tile_width','hips_frame','hips_tile_format','obs_title','hips_copyright']}
+   else:
+    image=Image.open(io.BytesIO(data));image.load();entry['image']=image.size
+   result[suffix]=entry
+  except Exception as exc:result[suffix]=dict(error=str(exc))
+ print('MIRROR_RESULT '+json.dumps(result),flush=True);return result
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:results=list(pool.map(check,bases))
+with open('mirror-check.json','w') as f:json.dump(results,f,indent=2)
