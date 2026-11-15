@@ -132,6 +132,7 @@ async function tileWorker(config){
  const realFetch=window.fetch.bind(window);
  window.fetch=async(input,options)=>{
   const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
+  if((url||'').startsWith('data:application/wasm;base64,')){emit('progress',{detail:'Preparing embedded WebAssembly renderer'});const encoded=url.slice(url.indexOf(',')+1);const binary=atob(encoded);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return new Response(bytes,{headers:{'Content-Type':'application/wasm'}});}
   const tile=/\/Norder\d+\/Dir\d+\/Npix\d+\.(jpg|jpeg|png)(\?|$)/i.test(url||'');
   if(tile){active++;last=performance.now();}
   try{
@@ -142,7 +143,7 @@ async function tileWorker(config){
   finally{if(tile){active--;last=performance.now();}}
  };
  try{
-  const {default:A}=await import(config.library);emit('progress',{detail:'Renderer library loaded'});await A.init;emit('progress',{detail:'WebGL renderer ready'});
+  const {default:A}=await import(config.library);emit('progress',{detail:'Renderer library loaded'});await Promise.race([A.init,new Promise((_,reject)=>setTimeout(()=>reject(Error('WebAssembly initialization timed out')),10000))]);emit('progress',{detail:'WebGL renderer ready'});
   const survey=A.HiPS(config.base,{name:'DSS2 color — '+config.name,cooFrame:'ICRS',maxOrder:9,tileSize:512,imgFormat:'jpeg',requestCredentials:'omit'});
   const aladin=A.aladin('#sky',{survey,mode:'dark',target:[config.ra,config.dec],fov:config.fov,projection:'TAN',cooFrame:'ICRS',showReticle:false,showZoomControl:false,showFullscreenControl:false,showLayersControl:false,showGotoControl:false,showShareControl:false,showSimbadPointerControl:false,showCooGridControl:false,showSettingsControl:false,showContextMenu:false,showStatusBar:false,log:false});
   const deadline=performance.now()+21000;
