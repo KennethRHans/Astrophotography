@@ -23,7 +23,14 @@ jobs:
         run: |
           google-chrome --headless --no-sandbox --disable-dev-shm-usage --remote-debugging-port=9233 --user-data-dir="$RUNNER_TEMP/ref-browser" --no-first-run --no-default-browser-check about:blank > "$RUNNER_TEMP/chrome.log" 2>&1 &
           python -m http.server 8133 --bind 127.0.0.1 > "$RUNNER_TEMP/ref-server.log" 2>&1 &
-          sleep 3
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9233/json > /dev/null; then break; fi
+            sleep 1
+          done
+          if ! curl -fsS http://127.0.0.1:9233/json > /dev/null; then
+            cat "$RUNNER_TEMP/chrome.log"
+            exit 1
+          fi
           node test-reference.mjs
       - name: Verify standalone files
         run: |
