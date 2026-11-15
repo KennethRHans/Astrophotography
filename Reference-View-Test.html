@@ -183,7 +183,7 @@ function renderColorTile(mirror,ra,dec,fov,generation,progress){
    if(event.data.type==='progress')progress(event.data.detail);
    else if(event.data.type==='error')finish(new Error(event.data.detail));
    else if(event.data.type==='complete'){
-    const value=event.data;if(typeof value.data!=='string'||!value.data.startsWith('data:image/jpeg;base64,')||value.data.length>2500000){finish(new Error('Invalid rendered image'));return;}
+    const value=event.data;if(typeof value.data!=='string'||!/^data:image\/(jpeg|png);base64,/.test(value.data)||value.data.length>2500000){finish(new Error('Invalid rendered image: '+typeof value.data+' / '+String(value.data).slice(0,42)+' / '+String(value.data?.length)));return;}
     finish(null,value);
    }
   };
