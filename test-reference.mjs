@@ -41,8 +41,15 @@ if(process.env.TEST_LIVE_REFERENCE==='1'){
   const colorDeadline=Date.now()+155000;let color;
   do{await new Promise(r=>setTimeout(r,700));color=await evaluate(`({loaded:!$('referenceImage').hidden&&$('referenceImage').naturalWidth>0,status:$('referenceStatus').textContent,error:$('referenceStatus').classList.contains('error'),provider:$('provider').value,details:$('requestDetails').textContent,caption:$('referenceCaption').textContent,render:window.lastColorRender,diagnostics:window.colorDiagnostics})`);}while(!color.loaded&&!color.error&&Date.now()<colorDeadline);
   console.log('BROWSER_LOG '+JSON.stringify(browserLog.map(s=>s.slice(0,400)).slice(-20)));console.log('LIVE_COLOR_RESULT '+JSON.stringify(color));if(!color.loaded||!color.provider.startsWith('color')||!color.caption.includes('DSS2 color'))throw Error('Live color browser image did not load: '+color.status+' '+color.details);
+  await send('Network.setBlockedURLs',{urls:['*stpubdata.s3.us-east-1.amazonaws.com/mast/skybackgrounds/DSSColor/*']});
+  await evaluate(`$('provider').value='color';$('provider').dispatchEvent(new Event('change'));$('grayFallback').checked=false;$('loadReference').click();`);
+  const fallbackDeadline=Date.now()+140000;let fallback;
+  do{await new Promise(r=>setTimeout(r,700));fallback=await evaluate(`({loaded:!$('referenceImage').hidden&&$('referenceImage').naturalWidth>0,error:$('referenceStatus').classList.contains('error'),status:$('referenceStatus').textContent,render:window.lastColorRender,caption:$('referenceCaption').textContent})`);}while(!fallback.loaded&&!fallback.error&&Date.now()<fallbackDeadline);
+  console.log('LIVE_MIRROR_FALLBACK '+JSON.stringify(fallback));await send('Network.setBlockedURLs',{urls:[]});
+  if(!fallback.loaded||fallback.render?.mirror==='MAST'||!fallback.caption.includes('DSS2 color'))throw Error('Live mirror fallback failed: '+fallback.status);
   await evaluate(`$('consent').checked=false;$('consent').dispatchEvent(new Event('change'));$('clearReference').click();$('loadSaved').click();`);
-  await check('Real color image reloads from saved cache without consent',`!$('referenceImage').hidden&&$('referenceStatus').textContent.includes('offline')`);
+  await new Promise(r=>setTimeout(r,300));
+  await check('Real color image reloads from saved cache without consent',`!$('referenceImage').hidden&&$('referenceImage').complete&&$('referenceImage').naturalWidth>0&&$('referenceImage').src.startsWith('data:image/')&&$('referenceStatus').textContent.includes('offline')`);
 
 }
 
