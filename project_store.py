@@ -35,6 +35,8 @@ class EditHistory:
 
 def validate_state(state,shape,slider_ranges=None):
     if not isinstance(state,dict):raise ValueError('Invalid editing state')
+    from opening_stretch import validate_opening_stretch
+    validate_opening_stretch(state.get('opening_stretch'))
     from background_extraction import validate_extraction
     validate_extraction(state.get('background_fit'))
     h,w,_=shape
@@ -68,7 +70,7 @@ def save_project(path,linear,header,manifest):
     path=Path(path)
     if path.suffix.lower()!='.astro':raise ValueError('Project filenames must end with .astro')
     if linear.ndim!=3 or linear.shape[-1]!=3 or linear.nbytes>MAX_IMAGE_BYTES:raise ValueError('Unsupported project image size')
-    meta=copy.deepcopy(manifest);meta['format']='astro-studio-project';meta['version']=1
+    meta=copy.deepcopy(manifest);meta['format']='astro-studio-project';meta['version']=2 if any(state.get('opening_stretch') is not None for state in [meta['state'],*meta.get('history',{}).get('states',[])]) else 1
     validate_state(meta['state'],linear.shape)
     encoded=json.dumps(meta,ensure_ascii=False,allow_nan=False).encode('utf-8')
     if len(encoded)>MAX_MANIFEST_BYTES:raise ValueError('Project metadata is too large')
@@ -90,7 +92,7 @@ def load_project(path):
         if len(names)!=3 or set(names)!={'project.json','header.txt','linear.npy'}:raise ValueError('Unrecognized project contents')
         if archive.getinfo('project.json').file_size>MAX_MANIFEST_BYTES or archive.getinfo('header.txt').file_size>1024**2:raise ValueError('Project metadata is too large')
         meta=json.loads(archive.read('project.json').decode('utf-8'))
-        if not isinstance(meta,dict) or meta.get('format')!='astro-studio-project' or meta.get('version')!=1:raise ValueError('Unsupported project format/version')
+        if not isinstance(meta,dict) or meta.get('format')!='astro-studio-project' or meta.get('version') not in (1,2):raise ValueError('Unsupported project format/version')
         entry=archive.getinfo('linear.npy')
         if entry.file_size>MAX_IMAGE_BYTES+4096:raise ValueError('Project image is too large')
         with archive.open(entry) as stream:

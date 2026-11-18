@@ -17,7 +17,7 @@ from project_store import EditHistory,validate_state,save_project,load_project
 from histogram import HistogramView,histogram_data
 import community_links
 from feedback import FeedbackDialog
-from app_version import VERSION
+from app_version import VERSION,PREVIEW_BUILD
 from themes import THEMES,apply_theme
 from frame_review import FrameReviewDialog
 from background_dialog import BackgroundDialog
@@ -26,6 +26,7 @@ from preview_render import PreviewRenderer,PreviewWorker
 
 from controls import WheelSlider,SliderValueRow,VisibleGpuCheckBox
 from tone_curve import ToneCurve
+from opening_stretch import opening_statistics
 from astro_adjustments import NEUTRAL_CURVE
 
 
@@ -86,13 +87,14 @@ class Window(W.QMainWindow):
         self.solution_header=None
         self.reference_panel=None;self.reference_dock=None
         self.background_fit=None
+        self.opening_stretch=None
         self.annotations=[];self.labels_visible=True
         self.source_paths=[]
         self.preview_renderer=PreviewRenderer();self.preview_worker=None;self._preview_generation=0;self._preview_pending=False;self._close_after_preview=False;self._files_json=None
-        self.setWindowTitle('Easy Astro Studio • Version '+VERSION)
+        self.setWindowTitle('Easy Astro Studio • Version '+VERSION+(' • Opening Preview Test' if PREVIEW_BUILD else ''))
         self.base_title=self.windowTitle()
         self.resize(1200, 880)
-        self.settings_store=settings if settings is not None else QtCore.QSettings('Astrivanta','EasyAstroStudio')
+        self.settings_store=settings if settings is not None else QtCore.QSettings('Astrivanta','EasyAstroStudio-OpeningPreviewTest' if PREVIEW_BUILD else 'EasyAstroStudio')
         self.theme_name=apply_theme(W.QApplication.instance(),self.settings_store.value('appearance/theme','Dark'))
         self.source_name = 'image' 
         self.linear = self.header = self.rendered = None
@@ -187,13 +189,17 @@ class Window(W.QMainWindow):
         sidebar = W.QVBoxLayout(self.step_adjust)
         section_title = W.QLabel('4. Adjust and Crop'); section_title.setObjectName('sectionTitle'); section_title.setWordWrap(True); sidebar.addWidget(section_title)
         adjust_hint = W.QLabel('Changes appear automatically in the preview. Adjust the sliders or crop, then continue to Export.'); adjust_hint.setWordWrap(True); sidebar.addWidget(adjust_hint)
+        self.opening_mode=W.QComboBox();self.opening_mode.addItems(['Adaptive — darker sky','Legacy — bright preview'])
+        self.opening_mode.setToolTip('Changes the opening transfer and resets Stretch, Black point, Exposure and Shadows. Other edits remain. Undo restores the previous view. Linear FITS data are unchanged.')
+        opening_row=W.QFormLayout();opening_row.addRow('Opening preview',self.opening_mode);sidebar.addLayout(opening_row)
+        self.opening_mode.currentIndexChanged.connect(self.change_opening_mode)
         self.sliders = {}
         self.slider_rows = {}
         self.slider_defaults = {};self.slider_labels={}
         percent=lambda v:f'{v}%'
         specs={
             'Stretch':('Stretch — faint detail',0,100,30,'Asinh stretch reveals faint signal. It can brighten noise and sky as well as the target.',str),
-            'Black percentile ×100':('Black point — dark clipping',0,100,10,'Percent of the darkest samples used for the black point. Raising this can hide faint signal; watch black clipping.',lambda v:f'{v/100:.2f}%'),
+            'Black percentile ×100':('Black point — dark clipping',0,100,10,'Additional percentile clipping in Adaptive mode; the shared opening black point remains. Legacy uses per-channel percentile black points. Raising this can hide faint signal; watch black clipping.',lambda v:f'{v/100:.2f}%'),
             'Brightness (stops ×100)':('Exposure — display brightness',-200,200,0,'Display exposure in stops; does not change capture exposure or linear FITS data.',lambda v:f'{v/100:+.2f} stops'),
             'Contrast %':('Contrast',25,250,100,'Contrast around a fixed display pivot. High values can clip shadows and highlights.',percent),
             'Saturation %':('Color saturation',0,200,100,'Changes color strength; not color calibration.',percent),
@@ -226,7 +232,7 @@ class Window(W.QMainWindow):
         self.reset_curve=W.QPushButton('Reset curve');self.reset_curve.clicked.connect(self.reset_tone_curve);curve_layout.addWidget(self.reset_curve)
         self.curve.editStarted.connect(self.commit_history);self.curve.editFinished.connect(self.commit_history);self.curve.editFinished.connect(self.schedule_preview);self.curve.changed.connect(self.schedule_preview)
         hint = W.QLabel('Use Stretch, Black point and Exposure first. Advanced shadow and gradient controls can suppress faint nebulosity. Color balance is manual.'); hint.setWordWrap(True); sidebar.addWidget(hint)
-        self.baseline = W.QCheckBox('Compare: default stretch'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
+        self.baseline = W.QCheckBox('Compare: opening view'); self.baseline.toggled.connect(self.schedule_preview); sidebar.addWidget(self.baseline)
         self.auto_sky=W.QPushButton('Auto sky background');self.auto_sky.setToolTip('Suggest a darker display using Stretch and Brightness; clears the Sky offset. Other adjustments and source data are preserved. Faint nebulosity can look darker. Undo restores the previous view.');self.auto_sky.clicked.connect(self.auto_sky_background);sidebar.addWidget(self.auto_sky)
         self.reset = W.QPushButton('Reset adjustments')
         self.reset.setToolTip('Restore all sliders and the tone curve to their starting values')
@@ -453,6 +459,7 @@ class Window(W.QMainWindow):
         self.annotations=[];self.labels_visible=True;self.refresh_labels();self.labels_dock.hide();self.preview.annotation_placing=False
         self.background_fit=None
         self.linear=self.header=self.rendered=None
+        self.opening_stretch=None
         if self.reference_panel is not None:self.reference_panel.set_context(reference_context())
         self.original_linear=self.original_header=self.background=None
         self.project_path=None;self.source_name='image';self.source_paths=[]
@@ -534,7 +541,7 @@ class Window(W.QMainWindow):
         self.cancel.setEnabled(False)
         self.worker.deleteLater(); self.worker = None
         self.update_actions()
-    def loaded(self, linear, header):
+    def loaded(self, linear, header, automatic=True):
         self._history_ready=False
         self.solution_header=None
         self.annotations=[];self.labels_visible=True;self.refresh_labels()
@@ -543,6 +550,10 @@ class Window(W.QMainWindow):
         self.applied_crop=(0,0,linear.shape[1],linear.shape[0])
         self.source_name = getattr(self, 'pending_source_name', 'image')
         self.background_fit=None
+        opening=opening_statistics(linear) if automatic and not header.get('EASRASTR') else None
+        self.opening_stretch=list(opening) if opening is not None else None
+        old=self.opening_mode.blockSignals(True);self.opening_mode.setCurrentIndex(0 if self.opening_stretch is not None else 1);self.opening_mode.blockSignals(old)
+        old=self.baseline.blockSignals(True);self.baseline.setChecked(False);self.baseline.blockSignals(old)
         self.original_linear, self.original_header = linear, header.copy()
         self.linear, self.header = linear, header
         self.refresh_reference_context()
@@ -550,7 +561,7 @@ class Window(W.QMainWindow):
         self.background = self.make_background(linear)
         self.curve.set_values(NEUTRAL_CURVE)
         for name,slider in self.sliders.items():
-            value=0 if header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name]
+            value=0 if (header.get('EASRASTR') or self.opening_stretch is not None) and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name]
             old=slider.blockSignals(True);slider.setValue(value);slider.blockSignals(old);self.slider_rows[name].position_value()
         self.export.setEnabled(True)
         self.step_adjust.setEnabled(True); self.step_export.setEnabled(True)
@@ -665,6 +676,21 @@ class Window(W.QMainWindow):
         finally:self._restoring=False
         self.log.appendPlainText('Crop reset: full image restored and aspect ratio set to Free. Adjustments and labels preserved.')
         self.commit_history();self.update_actions()
+    def change_opening_mode(self,index):
+        if self.linear is None or self._restoring or not self._history_ready:return
+        self.commit_history();self._restoring=True
+        try:
+            values=opening_statistics(self.original_linear) if index==0 else None
+            self.opening_stretch=list(values) if values is not None else None
+            self.background=self.make_background(self.linear)
+            for name,value in [('Stretch',0 if values is not None else 30),('Black percentile ×100',0 if values is not None else 10),('Brightness (stops ×100)',0),('Sky background %',0)]:
+                widget=self.sliders[name];old=widget.blockSignals(True);widget.setValue(value);widget.blockSignals(old);self.slider_rows[name].position_value()
+            old=self.baseline.blockSignals(True);self.baseline.setChecked(False);self.baseline.blockSignals(old)
+            self.timer.stop();self.history_timer.stop();self.update_preview()
+        finally:self._restoring=False
+        self.commit_history()
+        self.log.appendPlainText('Opening preview: '+('adaptive linked RGB (20% background target).' if values is not None else 'legacy bright stretch.')+' Linear FITS pixels are unchanged.')
+
     def auto_sky_background(self):
         if self.linear is None or self.worker is not None or self.project_worker is not None:return
         self.commit_history()
@@ -686,7 +712,7 @@ class Window(W.QMainWindow):
     def reset_adjustments(self):
         self.commit_history()
         for name, slider in self.sliders.items():
-            slider.setValue(0 if self.header.get('EASRASTR') and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name])
+            slider.setValue(0 if (self.header.get('EASRASTR') or self.opening_stretch is not None) and name in ('Stretch','Black percentile ×100') else self.slider_defaults[name])
         self.baseline.setChecked(False)
         self.curve.set_values(NEUTRAL_CURVE)
         self.background_fit=None;self.background=self.make_background(self.linear)
@@ -699,7 +725,7 @@ class Window(W.QMainWindow):
         self.schedule_history()
     def settings(self):
         v={name:slider.value() for name,slider in self.sliders.items()}
-        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE,0)
+        if self.baseline.isChecked():return ((0,0,1,0,0,(1,1,1),0,1,0) if self.header.get('EASRASTR') or self.opening_stretch is not None else (30,.1,1,0,0,(1,1,1),0,1,0))+(0,0,1,NEUTRAL_CURVE,0)
         return (v['Stretch'],v['Black percentile ×100']/100,v['Saturation %']/100,v['Noise smoothing ×100']/100,
                 v['Background correction %']/100,tuple(v[name]/100 for name in ('Red balance %','Green balance %','Blue balance %')),
                 v['Brightness (stops ×100)']/100,v['Contrast %']/100,v['Sky background %']/100,v['Midtones %']/100,v['Star-preserving noise reduction %']/100,v['Star protection %']/100,tuple(self.curve.values),v['Background neutralization %']/100)
@@ -794,7 +820,8 @@ class Window(W.QMainWindow):
             coefficients,_=fit_sky(self.original_linear,self.background_fit)
             model=cropped_coefficients(coefficients,self.applied_crop,self.original_linear.shape)
         else:model=engine.background_model(image)
-        return dict(display_encoded=True,background=model) if self.header.get('EASRASTR') else model
+        if self.header.get('EASRASTR'):return dict(display_encoded=True,background=model)
+        return dict(opening_stretch=tuple(self.opening_stretch),background=model) if self.opening_stretch is not None else model
     def save_chime_preference(self,value):
         self.settings_store.setValue('notifications/stack_sound',value);self.settings_store.sync()
     def play_stack_chime(self):
@@ -898,7 +925,7 @@ class Window(W.QMainWindow):
             self.log.appendPlainText('Saved '+path)
         except Exception as exc: W.QMessageBox.critical(self, 'Export failed', str(exc))
     def edit_state(self):
-        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},curve=list(self.curve.values),background_fit=copy.deepcopy(self.background_fit),compare=self.baseline.isChecked(),
+        return dict(sliders={name:slider.value() for name,slider in self.sliders.items()},curve=list(self.curve.values),background_fit=copy.deepcopy(self.background_fit),opening_stretch=copy.deepcopy(self.opening_stretch),compare=self.baseline.isChecked(),
                     annotations=copy.deepcopy(self.annotations),labels_visible=self.labels_visible,applied_crop=list(self.applied_crop),selection=list(self.crop_bounds),ratio=self.crop_ratio.currentText(),guides=self.guides.currentText())
     def invalidate_file_cache(self,*args):self._files_json=None
     def project_signature(self):
@@ -922,6 +949,7 @@ class Window(W.QMainWindow):
         self.run.setEnabled(not busy and self.files.count()>=2);self.next_stack.setEnabled(not busy and self.files.count()>=2)
         self.reference_label.setText('Reference: '+Path(self.files.item(0).text()).name if self.files.count() else 'Reference: first exposure in the list')
         ready=self.linear is not None and self._history_ready
+        self.opening_mode.setEnabled(ready and not busy and not self.header.get('EASRASTR',False))
         self.auto_sky_preview.setEnabled(ready and not busy);self.auto_sky.setEnabled(ready and not busy)
         self.reset_crop_preview.setEnabled(ready and not busy);self.restore_crop.setEnabled(ready and not busy)
         self.reference_action.setEnabled(not busy)
@@ -948,6 +976,9 @@ class Window(W.QMainWindow):
         self.validate_edit_state(state,self.original_linear.shape)
         self._restoring=True;self.history_timer.stop();self.timer.stop()
         try:
+            opening=copy.deepcopy(state.get('opening_stretch'))
+            opening_changed=opening!=self.opening_stretch;self.opening_stretch=opening
+            old=self.opening_mode.blockSignals(True);self.opening_mode.setCurrentIndex(0 if opening is not None else 1);self.opening_mode.blockSignals(old)
             config=copy.deepcopy(state.get('background_fit'))
             fit_changed=config!=self.background_fit;self.background_fit=config
             rect=tuple(state['applied_crop'])
@@ -955,7 +986,7 @@ class Window(W.QMainWindow):
                 x0,y0,x1,y1=rect;h,w,_=self.original_linear.shape
                 self.linear,self.header=engine.crop_image(self.original_linear,self.original_header,x0,w-x1,y0,h-y1)
                 self.applied_crop=rect;self.background=self.make_background(self.linear)
-            if fit_changed:self.background=self.make_background(self.linear)
+            if fit_changed or opening_changed:self.background=self.make_background(self.linear)
             self.curve.set_values(state.get('curve',list(NEUTRAL_CURVE)))
             self.annotations=copy.deepcopy(state.get('annotations',[]));self.labels_visible=state.get('labels_visible',True);self.refresh_labels()
             for name,value in state['sliders'].items():
@@ -1025,12 +1056,13 @@ class Window(W.QMainWindow):
         try:
             linear,header,meta=payload
             for state in [meta['state'],*meta.get('history',{}).get('states',[])]:
+                state.setdefault('opening_stretch',None)
                 state['sliders'].setdefault('Background neutralization %',0)
                 state['sliders'].setdefault('Sky background %',0);state.setdefault('annotations',[]);state.setdefault('labels_visible',True)
                 state['sliders'].setdefault('Midtones %',0);state['sliders'].setdefault('Star-preserving noise reduction %',0);state['sliders'].setdefault('Star protection %',100);state.setdefault('curve',list(NEUTRAL_CURVE))
             self.validate_edit_state(meta['state'],linear.shape)
             for state in meta.get('history',{}).get('states',[]):self.validate_edit_state(state,linear.shape)
-            self.loaded(linear,header)
+            self.loaded(linear,header,automatic=False)
             if meta.get('identification_wcs'):
                 from astropy.io import fits
                 self.solution_header=fits.Header.fromstring(meta['identification_wcs'],sep='\n')
@@ -1095,7 +1127,7 @@ if __name__ == '__main__':
     from windows_identity import configure_taskbar_identity,has_package_identity
     configure_taskbar_identity()
     app = W.QApplication(sys.argv)
-    app.setApplicationName('Easy Astro Studio')
+    app.setApplicationName('Easy Astro Studio Opening Preview Test' if PREVIEW_BUILD else 'Easy Astro Studio')
     app.setApplicationDisplayName('Easy Astro Studio')
     app.setStyle('Fusion')
     window = Window(ask_on_close='--smoke-test' not in sys.argv); window.show()

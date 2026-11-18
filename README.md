@@ -1,4 +1,6 @@
-# Easy Astro Studio — 1.7.0 Store update
+# Easy Astro Studio — Adaptive opening preview test (1.7.1)
+
+**Portable test only.** See [test instructions and project compatibility](OPENING_PREVIEW_TEST.md). This branch does not publish a Microsoft Store update.
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed

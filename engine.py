@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter
 import tifffile
 from PIL import Image
 from stack_store import AlignedFrames, combine
+from opening_stretch import validate_opening_stretch,linked_midtones
 from astro_adjustments import NEUTRAL_CURVE,tone_adjust,star_preserving_denoise
 
 
@@ -204,6 +205,7 @@ def background_model(linear):
 
 def correct_background(linear, strength=0, model=None):
     image = linear.astype(np.float32).copy()
+    if isinstance(model,dict):model=model.get('background')
     if strength == 0:
         return image
     if model is None:
@@ -235,6 +237,13 @@ def normalization_statistics(linear,black=.1,gradient=0,gains=(1,1,1),model=None
         return (np.percentile(image,black,axis=(0,1)) if black else 0),1.
     image=correct_background(linear,gradient,model)
     valid=(linear>0).all(axis=-1)
+    if isinstance(model,dict) and model.get('opening_stretch') is not None:
+        opening=validate_opening_stretch(model['opening_stretch'])
+        floor=opening[0]
+        if black and np.any(valid):
+            light=image[valid]@np.array([.2126,.7152,.0722],dtype=np.float32)
+            floor=max(floor,float(np.percentile(light,black)))
+        return floor,max(opening[1]-floor,1e-12)
     if not np.any(valid):return np.zeros(3),1.
     floor=np.percentile(image[valid],black,axis=0)
     scaled=np.maximum(image-floor,0)*np.asarray(gains,dtype=np.float32)
@@ -248,6 +257,9 @@ def normalize_image(linear,black=.1,gradient=0,gains=(1,1,1),model=None,statisti
         return np.clip((image-floor)*np.asarray(gains,dtype=np.float32),0,1),np.ones(linear.shape[:2],dtype=bool)
     image=correct_background(linear,gradient,model)
     valid=(linear>0).all(axis=-1)
+    if isinstance(model,dict) and model.get('opening_stretch') is not None:
+        floor,white=statistics if statistics is not None else normalization_statistics(linear,black,gradient,gains,model)
+        return np.clip(np.maximum(image-floor,0)*np.asarray(gains,dtype=np.float32)/white,0,1),valid
     sample=image[valid]
     if not sample.size:return np.zeros_like(image),valid
     floor=np.percentile(sample,black,axis=0) if statistics is None else statistics[0]
@@ -295,6 +307,8 @@ def render(linear, stretch=30, black=0.1, saturation=1, denoise=0,
     image,valid=normalization if normalization is not None else normalize_image(linear,black,gradient,gains,model)
     if not np.any(valid):return np.zeros_like(image)
     image=prepared if prepared is not None else star_preserving_denoise(neutralize_background(image,background_neutralization,valid),star_denoise,star_protection,valid)
+    if isinstance(model,dict) and model.get('opening_stretch') is not None:
+        image=linked_midtones(image,validate_opening_stretch(model['opening_stretch'])[2])
     if gpu is not None and not gpu.disabled:
         try:
             result = gpu.process(image, stretch, saturation, denoise, brightness, contrast)
