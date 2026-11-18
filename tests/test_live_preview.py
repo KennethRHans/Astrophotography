@@ -46,7 +46,7 @@ def test_fast_histogram_matches_reference_including_edges_and_outliers():
 def test_friendly_units_and_advanced_controls_keep_project_keys(tmp_path):
     app,w=app_and_window(tmp_path);w.loaded(sample(),fits.Header());settle(app,w)
     assert '×100' not in w.slider_labels['Black percentile ×100'].text()
-    assert w.slider_rows['Black percentile ×100'].value_label.text()=='0.10%'
+    assert w.slider_rows['Black percentile ×100'].value_label.text()=='0.00%'
     w.sliders['Brightness (stops ×100)'].setValue(25)
     assert w.slider_rows['Brightness (stops ×100)'].value_label.text()=='+0.25 stops'
     assert len(w.sliders)==15 and set(w.edit_state()['sliders'])==set(w.slider_defaults)

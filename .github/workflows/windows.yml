@@ -99,7 +99,7 @@ jobs:
       - name: Verify Program Files install and desktop shortcut
         shell: pwsh
         run: |
-          $setup = Start-Process -FilePath installer/EasyAstroStudio-1.7.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $setup = Start-Process -FilePath installer/EasyAstroStudio-1.7.1-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer failed: $($setup.ExitCode)" }
           $installed = Join-Path $env:ProgramFiles 'Easy Astro Studio/EasyAstroStudio.exe'
           if (-not (Test-Path $installed)) { throw 'Application missing from native Program Files' }
@@ -126,7 +126,7 @@ jobs:
           $oldFolder = Join-Path $env:ProgramFiles 'Astro Studio for Seestar'
           $sentinel = Join-Path $oldFolder 'user-image-preservation.txt'
           Set-Content -LiteralPath $sentinel -Value 'Preserve user-created files during rename upgrade'
-          $upgrade = Start-Process -FilePath installer/EasyAstroStudio-1.7.0-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
+          $upgrade = Start-Process -FilePath installer/EasyAstroStudio-1.7.1-Setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/TASKS=desktopicon' -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw 'Rename upgrade failed' }
           $exe = Join-Path $oldFolder 'EasyAstroStudio.exe'
           if (-not (Test-Path $exe)) { throw 'Renamed app missing from previous install directory' }
@@ -146,3 +146,9 @@ jobs:
           path: |
             installer/*.exe
             dist/EasyAstroStudio/
+      - name: Upload installer-only download
+        uses: actions/upload-artifact@v4
+        with:
+          name: EasyAstroStudio-Installer
+          path: installer/EasyAstroStudio-1.7.1-Setup.exe
+          if-no-files-found: error

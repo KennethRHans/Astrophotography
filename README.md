@@ -1,4 +1,6 @@
-# Easy Astro Studio — 1.7.0 Store update
+# Easy Astro Studio — 1.7.1 Windows release
+
+Adaptive FITS opening from the user-approved portable test is now promoted to the regular Windows release. See [release notes and project compatibility](RELEASE_NOTES_1_7_1.md).
 
 A Windows GUI for aligning and stacking color FITS exposures, editing existing
 FITS stacks and exporting images. Built for Windows 11 x64; Python is not needed
@@ -9,6 +11,27 @@ when using the installer. Previously named Astro Studio for Seestar.
 [Download the 1.7.0 Windows installer and portable bundle](https://github.com/KennethRHans/Astrophotography/actions/runs/43742762788/artifacts/14173289465).
 
 [Download the 1.7.0 Store upload ZIP](https://github.com/KennethRHans/Astrophotography/actions/runs/43742762788/artifacts/14173183816).
+
+## Adaptive FITS opening (1.7.1)
+
+New linear FITS images now open with an adaptive linked-RGB stretch targeting a
+moderately dark sky rather than the fixed strong stretch. Under **4. Adjust and
+Crop → Opening preview**, choose **Adaptive — darker sky** or **Legacy — bright
+preview**. Adaptive includes its base midtones transfer, so extra Stretch and
+additional Black point start at zero. It does not perform color calibration or
+automatic gradient removal.
+
+Old projects retain their saved legacy appearance. Adaptive projects remember the
+opening transfer through crop, zoom, Undo/Redo, reset, save and reopen. They use
+project format 2 and require version 1.7.1 or later; all-legacy histories remain
+format 1. Save copies if you also use an older app. JPG/PNG import stays in its
+display-encoded path. Raster exports include the selected display transfer; linear
+FITS exports and originals retain source pixels.
+
+Production mode restores the existing Astrivanta/EasyAstroStudio preferences and
+normal application identity. Test preferences are not imported. Object Reference,
+its color survey renderer, offline cache, embedded privacy policy and attribution
+remain included. No new online service is used by adaptive opening.
 
 ## Object Reference (1.7.0)
 
