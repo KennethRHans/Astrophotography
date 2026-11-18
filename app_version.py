@@ -1,2 +1,0 @@
-VERSION = '1.7.1'
-PREVIEW_BUILD = True
